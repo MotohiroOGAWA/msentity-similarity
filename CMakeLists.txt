@@ -38,7 +38,7 @@ include(GNUInstallDirs)
 include(FetchContent)
 FetchContent_Declare(msentity
   GIT_REPOSITORY https://github.com/MotohiroOGAWA/msentity.git
-  GIT_TAG 8b8491979782159db81645cfb185a1151600fe76)
+  GIT_TAG 18c29fc8eada8ebb6e674cdb2c59a63fc0de78be)
 set(MSENTITY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(MSENTITY_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(MSENTITY_TEST_BINDINGS OFF CACHE BOOL "" FORCE)
