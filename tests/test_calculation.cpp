@@ -64,7 +64,7 @@ TEST(Score, Validation) {
   EXPECT_EQ(method_name(Method::Cosine), "cosine");
 }
 
-// ---- agreement with the reference implementation (msentity-pre, Python) --------
+// ---- reference values for msentity/tests/data/sample.msp -----------------------
 
 TEST(Reference, AllPairsMatrixOfSampleMsp) {
   const float expected[5][5] = {

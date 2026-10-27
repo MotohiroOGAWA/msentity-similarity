@@ -20,7 +20,7 @@ class SimilarityTest {
       Path.of(System.getProperty("msentity.data", "../../../msentity/tests/data"));
   static final Path SAMPLE = MSENTITY_DATA.resolve("sample.msp");
 
-  // Reference values (msentity-pre) for sample.msp, cosine, bin width 0.01.
+  // Reference values for sample.msp, cosine, bin width 0.01.
   static final float[] ROW0 = {
     1.0f, 0.7569831609725952f, 0.85833740234375f, 0.6929314732551575f, 0.6837769150733948f
   };

@@ -23,7 +23,7 @@ DATA = REPO / "tests" / "data"
 SAMPLE = Path(os.environ.get("MSENTITY_TEST_DATA_DIR", REPO.parent / "msentity" / "tests" / "data")) \
     / "sample.msp"
 
-# Reference values (msentity-pre) for sample.msp, cosine, bin width 0.01.
+# Reference values for sample.msp, cosine, bin width 0.01.
 ROW0 = [1.0, 0.7569831609725952, 0.85833740234375, 0.6929314732551575, 0.6837769150733948]
 
 

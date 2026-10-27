@@ -32,7 +32,7 @@ std::shared_ptr<arrow::Table> scores_table(const std::vector<int64_t>& index1,
 }
 
 TEST(SimilarityDataset, ReadsReferenceFile) {
-  // Written by the reference implementation (msentity-pre).
+  // tests/data/similarity.mssim: schema version 2 with embedded matched data.
   auto result = SimilarityDataset::load(own_data("similarity.mssim"));
   EXPECT_EQ(result.size(), 16);
   ASSERT_TRUE(result.has_matched_data());

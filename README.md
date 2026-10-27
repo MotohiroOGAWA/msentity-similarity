@@ -72,8 +72,7 @@ See [docs/install.md](docs/install.md) for every language.
 
 msentity-similarity depends on msentity, never the other way round. Datasets
 cross between the two C libraries as `.msds` bytes, so each can be built,
-packaged, and versioned on its own. `.mssim` files written by the earlier
-Python implementation (schema versions 1 and 2) can be read.
+packaged, and versioned on its own.
 
 ## License
 
