@@ -39,17 +39,6 @@ jobs:
             msentity_import_library: build/_deps/msentity-build/Release/msentity_c.lib
             wheel_tag: win_amd64
             cmake_args: ""
-          - os: macos-14
-            rid: osx-arm64
-            triplet: arm64-osx-msentity
-            library: libmsentity_similarity_c.dylib
-            built: build/libmsentity_similarity_c.dylib
-            msentity_library: libmsentity_c.dylib
-            msentity_built: build/_deps/msentity-build/libmsentity_c.dylib
-            import_library: ""
-            msentity_import_library: ""
-            wheel_tag: macosx_14_0_arm64
-            cmake_args: -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DCMAKE_OSX_ARCHITECTURES=arm64
     defaults:
       run:
         shell: bash
@@ -77,13 +66,6 @@ jobs:
       - name: Install vcpkg build tools (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y autoconf automake autoconf-archive libtool pkg-config bison flex
-      - name: Install vcpkg build tools (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          brew install bison flex
-          echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
-          echo "$(brew --prefix flex)/bin" >> "$GITHUB_PATH"
-
       - name: Configure and build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \

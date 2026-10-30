@@ -16,7 +16,7 @@ shared library.
 
 ## Installation
 
-Ready-made packages for Linux x64, Windows x64, and macOS arm64 are published
+Ready-made packages for Linux x64 and Windows x64 are published
 with each [GitHub Release](https://github.com/MotohiroOGAWA/msentity-similarity/releases).
 `msentity-similarity` uses one pinned, compatible `msentity` release.
 
@@ -24,7 +24,6 @@ with each [GitHub Release](https://github.com/MotohiroOGAWA/msentity-similarity/
 |---|---|---|
 | Linux x64 (glibc ≥ 2.35) | `manylinux_2_35_x86_64` | `linux-x64` |
 | Windows x64 | `win_amd64` | `win-x64` |
-| macOS arm64 (Apple silicon, macOS ≥ 14) | `macosx_14_0_arm64` | `osx-arm64` |
 
 | Language | Install |
 |---|---|

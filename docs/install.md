@@ -106,8 +106,8 @@ cmake -S . -B build -G Ninja \
   -DFETCHCONTENT_SOURCE_DIR_MSENTITY=../msentity
 ```
 
-Release tags build self-contained wheels for Linux x64, Windows x64, and macOS
-arm64, attach them to a GitHub Release, and update the GitHub Pages pip index
+Release tags build self-contained wheels for Linux x64 and Windows x64, attach
+them to a GitHub Release, and update the GitHub Pages pip index
 using the [release workflow](../.github/workflows/release.yml). The similarity
 index also links the compatible `msentity==0.1.0` wheels, so one command installs
 both packages.
