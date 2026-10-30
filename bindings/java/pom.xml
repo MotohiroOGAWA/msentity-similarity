@@ -51,7 +51,7 @@
     <dependency>
       <groupId>io.github.motohiroogawa</groupId>
       <artifactId>msentity</artifactId>
-      <version>1.0.1</version>
+      <version>1.0.0</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>

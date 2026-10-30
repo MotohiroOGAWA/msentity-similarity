@@ -10,7 +10,7 @@ license = "MIT"
 requires-python = ">=3.10"
 # Keep the Python binding on the same released msentity version as CMake,
 # Java, and C#. Update these pins together for each compatibility release.
-dependencies = ["msentity==1.0.1", "numpy"]
+dependencies = ["msentity==1.0.0", "numpy"]
 
 [project.optional-dependencies]
 arrow = ["pyarrow>=14", "pandas"]

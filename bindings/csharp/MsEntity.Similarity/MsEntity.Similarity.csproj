@@ -21,7 +21,7 @@
     <ProjectReference Include="$(MsEntityProject)" />
   </ItemGroup>
   <ItemGroup Condition="!Exists('$(MsEntityProject)') Or '$(UseMsEntityPackage)' == 'true'">
-    <PackageReference Include="MsEntity" Version="1.0.1" />
+    <PackageReference Include="MsEntity" Version="1.0.0" />
   </ItemGroup>
 
   <!-- Native libraries collected by CI (bindings/natives/<rid>/) are packed as
