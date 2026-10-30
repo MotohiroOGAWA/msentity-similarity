@@ -32,12 +32,16 @@ For Python, the package installs the compatible released `msentity`
 automatically:
 
 ```console
-pip install msentity-similarity
+pip install msentity-similarity \
+  --find-links https://motohiroogawa.github.io/msentity-similarity/
 # Reproducible install:
-pip install msentity-similarity==0.1.0
+pip install msentity-similarity==0.1.0 \
+  --find-links https://motohiroogawa.github.io/msentity-similarity/
 ```
 
 Installation for all languages is in [docs/install.md](docs/install.md).
+Release assets also provide a Java JAR, a C# NuGet package, and C API archives
+with the native libraries bundled for Linux x64, Windows x64, and macOS arm64.
 
 ## Example
 

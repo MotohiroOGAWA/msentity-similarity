@@ -21,6 +21,10 @@ jobs:
             triplet: x64-linux
             library: libmsentity_similarity_c.so
             built: build/libmsentity_similarity_c.so
+            msentity_library: libmsentity_c.so
+            msentity_built: build/_deps/msentity-build/libmsentity_c.so
+            import_library: ""
+            msentity_import_library: ""
             wheel_tag: manylinux_2_35_x86_64
             cmake_args: ""
           - os: windows-2022
@@ -28,6 +32,10 @@ jobs:
             triplet: x64-windows-static-md
             library: msentity_similarity_c.dll
             built: build/bin/Release/msentity_similarity_c.dll
+            msentity_library: msentity_c.dll
+            msentity_built: build/_deps/msentity-build/bin/Release/msentity_c.dll
+            import_library: build/Release/msentity_similarity_c.lib
+            msentity_import_library: build/_deps/msentity-build/Release/msentity_c.lib
             wheel_tag: win_amd64
             cmake_args: ""
           - os: macos-14
@@ -35,6 +43,10 @@ jobs:
             triplet: arm64-osx-msentity
             library: libmsentity_similarity_c.dylib
             built: build/libmsentity_similarity_c.dylib
+            msentity_library: libmsentity_c.dylib
+            msentity_built: build/_deps/msentity-build/libmsentity_c.dylib
+            import_library: ""
+            msentity_import_library: ""
             wheel_tag: macosx_14_0_arm64
             cmake_args: -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DCMAKE_OSX_ARCHITECTURES=arm64
     defaults:
@@ -47,7 +59,6 @@ jobs:
         run: |
           version=$(sed -n 's/^  VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt)
           test "v$version" = "$GITHUB_REF_NAME"
-          grep -q 'GIT_TAG v0.1.0' CMakeLists.txt
           grep -q 'msentity==0.1.0' bindings/python/pyproject.toml
 
       - name: Set up vcpkg
@@ -92,30 +103,128 @@ jobs:
           python -m pip install setuptools wheel
           python bindings/python/build_wheel.py \
             --native "${{ matrix.built }}" --platform-tag "${{ matrix.wheel_tag }}" --out dist
+      - name: Collect native libraries and C API archive
+        run: |
+          version=$(sed -n 's/^  VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt)
+          mkdir -p "out/natives/${{ matrix.rid }}"
+          cp -L "${{ matrix.built }}" "out/natives/${{ matrix.rid }}/${{ matrix.library }}"
+          cp -L "${{ matrix.msentity_built }}" "out/natives/${{ matrix.rid }}/${{ matrix.msentity_library }}"
+          name="msentity-similarity-c-$version-${{ matrix.rid }}"
+          mkdir -p "out/c/$name/include/msentity/similarity/c" \
+                   "out/c/$name/include/msentity/c" "out/c/$name/lib"
+          cp include/msentity/similarity/c/msentity_similarity_c.h \
+             "out/c/$name/include/msentity/similarity/c/"
+          cp build/_deps/msentity-src/include/msentity/c/msentity_c.h \
+             "out/c/$name/include/msentity/c/"
+          cp "out/natives/${{ matrix.rid }}/${{ matrix.library }}" \
+             "out/natives/${{ matrix.rid }}/${{ matrix.msentity_library }}" "out/c/$name/lib/"
+          if [ -n "${{ matrix.import_library }}" ]; then
+            cp "${{ matrix.import_library }}" "${{ matrix.msentity_import_library }}" "out/c/$name/lib/"
+          fi
+          cp LICENSE "out/c/$name/"
+          (cd out/c && cmake -E tar cf "$name.zip" --format=zip "$name")
       - uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ matrix.rid }}
           path: dist/*.whl
+      - uses: actions/upload-artifact@v7
+        with:
+          name: natives-${{ matrix.rid }}
+          path: out/natives
+      - uses: actions/upload-artifact@v7
+        with:
+          name: c-api-${{ matrix.rid }}
+          path: out/c/*.zip
+
+  packages:
+    name: Java and C# packages
+    needs: wheels
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: natives-*
+          merge-multiple: true
+          path: bindings/natives
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Check out the pinned msentity release
+        run: |
+          msentity_ref=$(sed -n 's/^[[:space:]]*GIT_TAG \([^)]*\)).*/\1/p' CMakeLists.txt)
+          test -n "$msentity_ref"
+          git clone https://github.com/MotohiroOGAWA/msentity.git ../msentity-release
+          git -C ../msentity-release checkout "$msentity_ref"
+      - name: Build Java JAR with all native libraries
+        run: |
+          mvn -q -B -f ../msentity-release/bindings/java/pom.xml install -DskipTests
+          mvn -B -f bindings/java/pom.xml package -DskipTests
+          version=$(sed -n 's/^  VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt)
+          mkdir -p dist
+          cp "bindings/java/target/msentity-similarity-$version.jar" dist/
+          cp bindings/java/pom.xml "dist/msentity-similarity-$version.pom"
+      - name: Build NuGet package with all native libraries
+        run: |
+          dotnet pack ../msentity-release/bindings/csharp/MsEntity/MsEntity.csproj -c Release -o local-packages
+          dotnet restore bindings/csharp/MsEntity.Similarity/MsEntity.Similarity.csproj \
+            -p:UseMsEntityPackage=true --source local-packages --source https://api.nuget.org/v3/index.json
+          dotnet pack bindings/csharp/MsEntity.Similarity/MsEntity.Similarity.csproj \
+            -c Release -o dist -p:UseMsEntityPackage=true --no-restore
+      - uses: actions/upload-artifact@v7
+        with:
+          name: language-packages-linux
+          path: dist/*
 
   publish:
     name: Publish release
-    needs: wheels
+    needs: [wheels, packages]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     environment:
-      name: pypi
-      url: https://pypi.org/project/msentity-similarity/
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     permissions:
       contents: write
+      pages: write
       id-token: write
     steps:
       - uses: actions/download-artifact@v8
         with:
-          pattern: wheel-*
+          pattern: "{wheel,c-api,language-packages}-*"
           merge-multiple: true
           path: dist
-      - uses: pypa/gh-action-pypi-publish@release/v1
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "msentity-similarity $GITHUB_REF_NAME" --generate-notes
+      - name: Generate pip index
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir site
+          {
+            echo '<!doctype html><html><body>'
+            for repo in "$GITHUB_REPOSITORY" MotohiroOGAWA/msentity; do
+              gh api --paginate "/repos/$repo/releases?per_page=100" \
+                --jq '.[] | .assets[] | select(.name | endswith(".whl")) | [.browser_download_url, .name] | @tsv' |
+                while IFS=$'\t' read -r url name; do
+                  echo "<a href=\"$url\">$name</a><br>"
+                done
+            done
+            echo '</body></html>'
+          } > site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

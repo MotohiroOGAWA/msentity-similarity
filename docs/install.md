@@ -39,17 +39,19 @@ both repositories together.
 
 ## Python (≥ 3.10)
 
-Install the latest release from PyPI:
+Install the latest release from the GitHub Pages wheel index:
 
 ```console
-pip install msentity-similarity
+pip install msentity-similarity \
+  --find-links https://motohiroogawa.github.io/msentity-similarity/
 ```
 
 The package metadata installs the compatible `msentity==0.1.0` automatically.
 Pin the similarity version for a reproducible environment:
 
 ```console
-pip install msentity-similarity==0.1.0
+pip install msentity-similarity==0.1.0 \
+  --find-links https://motohiroogawa.github.io/msentity-similarity/
 ```
 
 ```python
@@ -64,21 +66,28 @@ hits.save("hits.mssim")
 
 ## Java
 
-The Java artifact uses `io.github.motohiroogawa:msentity:0.1.0`. Until the
-similarity artifact is published to a Maven repository, build it locally:
+Download both JARs from the corresponding GitHub Releases. The similarity JAR
+contains its native library for every supported platform; the msentity JAR does
+the same for the dataset API:
 
 ```console
-(cd bindings/java && mvn install -DskipTests)
+curl -LO https://github.com/MotohiroOGAWA/msentity/releases/download/v0.1.0/msentity-0.1.0.jar
+curl -LO https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v0.1.0/msentity-similarity-0.1.0.jar
+java --enable-native-access=ALL-UNNAMED \
+  -cp 'app.jar:msentity-0.1.0.jar:msentity-similarity-0.1.0.jar' app.Main
 ```
 
 ## C#
 
-The project references `MsEntity` version `0.1.0` when a sibling development
-checkout is not present:
+Download both NuGet packages from their GitHub Releases into one directory,
+then add that directory as the package source:
 
 ```console
-dotnet pack bindings/csharp/MsEntity.Similarity -c Release -o packages \
-  -p:UseMsEntityPackage=true
+curl -LO https://github.com/MotohiroOGAWA/msentity/releases/download/v0.1.0/MsEntity.0.1.0.nupkg
+curl -LO https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v0.1.0/MsEntity.Similarity.0.1.0.nupkg
+mkdir packages
+mv MsEntity*.nupkg packages/
+dotnet add package MsEntity.Similarity --version 0.1.0 --source ./packages
 ```
 
 ## Building and testing from source
@@ -98,5 +107,7 @@ cmake -S . -B build -G Ninja \
 ```
 
 Release tags build self-contained wheels for Linux x64, Windows x64, and macOS
-arm64 and publish them to PyPI using the
-[release workflow](../.github/workflows/release.yml).
+arm64, attach them to a GitHub Release, and update the GitHub Pages pip index
+using the [release workflow](../.github/workflows/release.yml). The similarity
+index also links the compatible `msentity==0.1.0` wheels, so one command installs
+both packages.
