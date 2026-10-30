@@ -59,7 +59,7 @@ jobs:
         run: |
           version=$(sed -n 's/^  VERSION \([0-9.]*\)$/\1/p' CMakeLists.txt)
           test "v$version" = "$GITHUB_REF_NAME"
-          grep -q 'msentity==0.1.0' bindings/python/pyproject.toml
+          grep -q 'msentity==1.0.1' bindings/python/pyproject.toml
 
       - name: Set up vcpkg
         run: |
