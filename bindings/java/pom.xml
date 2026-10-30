@@ -6,7 +6,7 @@
 
   <groupId>io.github.motohiroogawa</groupId>
   <artifactId>msentity-similarity</artifactId>
-  <version>1.0.4</version>
+  <version>1.1.1</version>
   <name>msentity-similarity</name>
   <description>Java binding of msentity-similarity (spectrum similarity and .mssim files)</description>
 
@@ -51,7 +51,7 @@
     <dependency>
       <groupId>io.github.motohiroogawa</groupId>
       <artifactId>msentity</artifactId>
-      <version>1.0.1</version>
+      <version>1.1.1</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
