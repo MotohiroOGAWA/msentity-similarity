@@ -19,6 +19,7 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import warnings
 import weakref
 from typing import Any, Callable, Sequence
 
@@ -79,10 +80,16 @@ def _dataset_bytes(dataset: "ms.Dataset | bytes") -> bytes:
     raise TypeError(f"expected msentity.Dataset or .msds bytes, got {type(dataset).__name__}")
 
 
-def _options(method: str, bin_width: float, intensity_exponent: float, threads: int) -> _n.Options:
+def _options(method: str, mz_tolerance_da: float, mz_tolerance_ppm: float,
+             intensity_exponent: float, threads: int, bin_width: float | None = None) -> _n.Options:
     if method not in _n.METHODS:
         raise InvalidArgumentError(f"method must be one of {sorted(_n.METHODS)}, got {method!r}")
-    return _n.Options(_n.METHODS[method], int(threads), float(bin_width), float(intensity_exponent))
+    if bin_width is not None:
+        warnings.warn("bin_width is deprecated; use mz_tolerance_da", DeprecationWarning,
+                      stacklevel=3)
+        mz_tolerance_da = bin_width
+    return _n.Options(_n.METHODS[method], int(threads), float(mz_tolerance_da),
+                      float(mz_tolerance_ppm), float(intensity_exponent))
 
 
 def _new_result(call) -> "SimilarityDataset":
@@ -102,7 +109,9 @@ def _i64_ptr(array: np.ndarray):
 # ---- calculations --------------------------------------------------------------------------
 
 def pair_scores(ds1: "ms.Dataset", index1: Sequence[int], ds2: "ms.Dataset",
-                index2: Sequence[int], *, method: str = "cosine", bin_width: float = 0.01,
+                index2: Sequence[int], *, method: str = "cosine",
+                mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 0.0,
+                bin_width: float | None = None,
                 intensity_exponent: float = 1.0, threads: int = 0) -> np.ndarray:
     """Scores of ds1[index1[k]] vs ds2[index2[k]] as a float32 array."""
     a, b = _dataset_bytes(ds1), _dataset_bytes(ds2)
@@ -110,7 +119,8 @@ def pair_scores(ds1: "ms.Dataset", index1: Sequence[int], ds2: "ms.Dataset",
     if len(i1) != len(i2):
         raise InvalidArgumentError("index1 and index2 must have the same length")
     out = np.empty(len(i1), dtype=np.float32)
-    options = _options(method, bin_width, intensity_exponent, threads)
+    options = _options(method, mz_tolerance_da, mz_tolerance_ppm,
+                       intensity_exponent, threads, bin_width)
     _check(_n.lib.mssim_pair_scores(a, len(a), _i64_ptr(i1), b, len(b), _i64_ptr(i2), len(i1),
                                     ctypes.byref(options),
                                     out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))))
@@ -118,21 +128,24 @@ def pair_scores(ds1: "ms.Dataset", index1: Sequence[int], ds2: "ms.Dataset",
 
 
 def all_pairs(ds1: "ms.Dataset", ds2: "ms.Dataset", *, method: str = "cosine",
-              bin_width: float = 0.01, intensity_exponent: float = 1.0,
+              mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 0.0,
+              bin_width: float | None = None, intensity_exponent: float = 1.0,
               threads: int = 0) -> np.ndarray:
     """len(ds1) × len(ds2) float32 score matrix."""
     a, b = _dataset_bytes(ds1), _dataset_bytes(ds2)
     n1 = len(ms.from_bytes(a)) if isinstance(ds1, (bytes, bytearray)) else len(ds1)
     n2 = len(ms.from_bytes(b)) if isinstance(ds2, (bytes, bytearray)) else len(ds2)
     out = np.empty((n1, n2), dtype=np.float32)
-    options = _options(method, bin_width, intensity_exponent, threads)
+    options = _options(method, mz_tolerance_da, mz_tolerance_ppm,
+                       intensity_exponent, threads, bin_width)
     _check(_n.lib.mssim_all_pairs(a, len(a), b, len(b), ctypes.byref(options),
                                   out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), out.size))
     return out
 
 
 def library_search(query: "ms.Dataset", reference: "ms.Dataset", threshold: float = 0.8, *,
-                   method: str = "cosine", bin_width: float = 0.01,
+                   method: str = "cosine", mz_tolerance_da: float = 0.01,
+                   mz_tolerance_ppm: float = 0.0, bin_width: float | None = None,
                    intensity_exponent: float = 1.0, threads: int = 0,
                    include_matched_data: bool = True, query_source: str | None = None,
                    reference_source: str | None = None,
@@ -144,7 +157,8 @@ def library_search(query: "ms.Dataset", reference: "ms.Dataset", threshold: floa
     ``query_source`` / ``reference_source`` are recorded in the metadata.
     """
     a, b = _dataset_bytes(query), _dataset_bytes(reference)
-    options = _options(method, bin_width, intensity_exponent, threads)
+    options = _options(method, mz_tolerance_da, mz_tolerance_ppm,
+                       intensity_exponent, threads, bin_width)
     callback = _n.ProgressFn(lambda done, total, _: progress(done, total)) if progress else \
         _n.ProgressFn()
     return _new_result(lambda out: _n.lib.mssim_library_search(
@@ -153,14 +167,17 @@ def library_search(query: "ms.Dataset", reference: "ms.Dataset", threshold: floa
 
 
 def similarity_by_key(ds1: "ms.Dataset", ds2: "ms.Dataset", key1: str = "SpecID",
-                      key2: str = "SpecID", *, method: str = "cosine", bin_width: float = 0.01,
+                      key2: str = "SpecID", *, method: str = "cosine",
+                      mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 0.0,
+                      bin_width: float | None = None,
                       intensity_exponent: float = 1.0, threads: int = 0,
                       include_matched_data: bool = False, source1: str | None = None,
                       source2: str | None = None) -> "SimilarityDataset":
     """Scores of the spectrum pairs whose ``key1`` / ``key2`` values are equal
     (each key value must be unique within its dataset)."""
     a, b = _dataset_bytes(ds1), _dataset_bytes(ds2)
-    options = _options(method, bin_width, intensity_exponent, threads)
+    options = _options(method, mz_tolerance_da, mz_tolerance_ppm,
+                       intensity_exponent, threads, bin_width)
     return _new_result(lambda out: _n.lib.mssim_similarity_by_key(
         a, len(a), b, len(b), _encode(key1), _encode(key2), ctypes.byref(options),
         int(include_matched_data), _encode(source1), _encode(source2), out))

@@ -105,7 +105,8 @@ msentity::similarity::Options options_from(const mssim_options* options) {
                       ? msentity::similarity::Method::Cosine
                       : msentity::similarity::Method::ReverseCosine;
   result.threads = options->threads;
-  result.bin_width = options->bin_width;
+  result.mz_tolerance_da = options->mz_tolerance_da;
+  result.mz_tolerance_ppm = options->mz_tolerance_ppm;
   result.intensity_exponent = options->intensity_exponent;
   return result;
 }
@@ -159,7 +160,8 @@ void mssim_default_options(mssim_options* options) {
   msentity::similarity::Options defaults;
   options->method = MSSIM_METHOD_COSINE;
   options->threads = defaults.threads;
-  options->bin_width = defaults.bin_width;
+  options->mz_tolerance_da = defaults.mz_tolerance_da;
+  options->mz_tolerance_ppm = defaults.mz_tolerance_ppm;
   options->intensity_exponent = defaults.intensity_exponent;
 }
 

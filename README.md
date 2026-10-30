@@ -7,7 +7,7 @@ shared library.
 
 | | |
 |---|---|
-| Scores | binned cosine and reverse cosine (bin width, intensity exponent), multithreaded |
+| Scores | cosine and reverse cosine with one-to-one peak matching within an m/z tolerance in Da and/or ppm (intensity exponent), multithreaded |
 | Modes | chosen pairs, all-pairs matrix, library search with threshold, pairs by metadata key |
 | Results | `SimilarityDataset`: Arrow table + calculation metadata + optionally the compared spectra; filter, sort, statistics |
 | Format | `.mssim` (HDF5 + Parquet + embedded `.msds`) — [specification](docs/format/mssim.md) |

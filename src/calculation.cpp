@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -15,15 +16,30 @@ namespace msentity::similarity {
 
 namespace {
 
-// A spectrum as a sparse binned vector: (bin, summed intensity) sorted by bin.
-struct BinnedSpectrum {
-  std::vector<std::pair<int64_t, double>> bins;
-  double norm = 0.0;  // sum of squared bin values
+// A peak that can be matched; peaks with zero intensity (after clipping) or a
+// non-finite m/z cannot contribute to a score and are left out.
+struct Peak {
+  double mz;
+  double intensity;
+  int64_t original_index;
+};
+
+// Peaks sorted by m/z (original order among equal m/z) and the squared norm
+// of all intensities.
+struct PreparedSpectrum {
+  std::vector<Peak> peaks;
+  double norm = 0.0;
 };
 
 void validate(const Options& options) {
-  if (!std::isfinite(options.bin_width) || options.bin_width <= 0) {
-    throw std::invalid_argument("bin_width must be positive");
+  if (!std::isfinite(options.mz_tolerance_da) || options.mz_tolerance_da < 0) {
+    throw std::invalid_argument("mz_tolerance_da must be finite and >= 0");
+  }
+  if (!std::isfinite(options.mz_tolerance_ppm) || options.mz_tolerance_ppm < 0) {
+    throw std::invalid_argument("mz_tolerance_ppm must be finite and >= 0");
+  }
+  if (options.mz_tolerance_da == 0 && options.mz_tolerance_ppm == 0) {
+    throw std::invalid_argument("at least one of mz_tolerance_da and mz_tolerance_ppm must be positive");
   }
   if (!std::isfinite(options.intensity_exponent) || options.intensity_exponent <= 0) {
     throw std::invalid_argument("intensity_exponent must be positive");
@@ -31,46 +47,108 @@ void validate(const Options& options) {
   if (options.threads < 0) throw std::invalid_argument("threads must be >= 0");
 }
 
-BinnedSpectrum bin_spectrum(const Spectrum& spectrum, const Options& options) {
-  BinnedSpectrum result;
-  std::vector<std::pair<int64_t, double>> peaks;
-  peaks.reserve(static_cast<std::size_t>(spectrum.size()));
+PreparedSpectrum prepare_spectrum(const Spectrum& spectrum, const Options& options) {
+  PreparedSpectrum result;
+  result.peaks.reserve(static_cast<std::size_t>(spectrum.size()));
   for (int64_t i = 0; i < spectrum.size(); ++i) {
     double intensity = std::max(0.0, spectrum.intensity(i));
     if (options.intensity_exponent != 1.0) {
       intensity = std::pow(intensity, options.intensity_exponent);
     }
-    auto bin = static_cast<int64_t>(std::floor(spectrum.mz(i) / options.bin_width));
-    peaks.emplace_back(bin, intensity);
+    result.norm += intensity * intensity;
+    double mz = spectrum.mz(i);
+    if (intensity > 0 && std::isfinite(mz)) result.peaks.push_back({mz, intensity, i});
   }
-  std::stable_sort(peaks.begin(), peaks.end(),
-                   [](const auto& a, const auto& b) { return a.first < b.first; });
-  for (const auto& peak : peaks) {
-    if (!result.bins.empty() && result.bins.back().first == peak.first) {
-      result.bins.back().second += peak.second;
-    } else {
-      result.bins.push_back(peak);
-    }
-  }
-  for (const auto& bin : result.bins) result.norm += bin.second * bin.second;
+  std::stable_sort(result.peaks.begin(), result.peaks.end(),
+                   [](const Peak& a, const Peak& b) { return a.mz < b.mz; });
   return result;
 }
 
-float score(const BinnedSpectrum& a, const BinnedSpectrum& b, Method method) {
+// The m/z match rule: |mz1 - mz2| <= Da tolerance, or the difference relative
+// to the mean m/z <= ppm tolerance. Bounds are inclusive; a few ulps of slack
+// keep e.g. 100.00 vs 100.01 at 0.01 Da inside despite rounding.
+class Tolerance {
+ public:
+  explicit Tolerance(const Options& options)
+      : da_(options.mz_tolerance_da), ppm_(options.mz_tolerance_ppm * 1e-6) {}
+
+  bool matches(double mz1, double mz2) const {
+    double difference = std::abs(mz1 - mz2);
+    double slack = kSlack * std::max(std::abs(mz1), std::abs(mz2));
+    if (da_ > 0 && difference <= da_ + slack) return true;
+    return ppm_ > 0 && difference <= ppm_ * (mz1 + mz2) / 2.0 + slack;
+  }
+
+  // [lower, upper] containing every m/z that matches mz; both bounds grow
+  // with mz, so a sorted spectrum can be scanned with a sliding window.
+  std::pair<double, double> window(double mz) const {
+    double lower = mz - da_, upper = mz + da_;
+    if (ppm_ > 0 && mz > 0) {
+      double r = ppm_ / 2.0;  // |mz - x| <= r (mz + x)
+      lower = std::min(lower, mz * (1.0 - r) / (1.0 + r));
+      upper = r >= 1.0 ? std::numeric_limits<double>::infinity()
+                       : std::max(upper, mz * (1.0 + r) / (1.0 - r));
+    }
+    double pad = 1e-12 * (std::abs(mz) + 1.0);
+    return {lower - pad, upper + pad};
+  }
+
+ private:
+  static constexpr double kSlack = 8 * std::numeric_limits<double>::epsilon();
+  double da_;
+  double ppm_;
+};
+
+struct Candidate {
+  double difference;
+  uint32_t first;   // positions in the sorted peaks
+  uint32_t second;
+};
+
+// Peaks are paired one-to-one: candidate pairs within tolerance are taken in
+// order of increasing m/z difference (ties: original peak order of the first,
+// then the second spectrum), skipping pairs whose peaks are already used.
+float score(const PreparedSpectrum& a, const PreparedSpectrum& b, const Tolerance& tolerance,
+            Method method) {
+  // Per-thread buffers: scoring a pair allocates nothing once they have grown.
+  thread_local std::vector<Candidate> candidates;
+  thread_local std::vector<char> used_a, used_b;
+  candidates.clear();
+
+  if (a.peaks.empty() || b.peaks.empty()) return 0.0f;
+  if (tolerance.window(a.peaks.back().mz).second < b.peaks.front().mz ||
+      tolerance.window(a.peaks.front().mz).first > b.peaks.back().mz) {
+    return 0.0f;  // m/z ranges too far apart
+  }
+  std::size_t start = 0;
+  for (std::size_t i = 0; i < a.peaks.size(); ++i) {
+    double mz = a.peaks[i].mz;
+    auto [lower, upper] = tolerance.window(mz);
+    while (start < b.peaks.size() && b.peaks[start].mz < lower) ++start;
+    for (std::size_t j = start; j < b.peaks.size() && b.peaks[j].mz <= upper; ++j) {
+      if (tolerance.matches(mz, b.peaks[j].mz)) {
+        candidates.push_back({std::abs(mz - b.peaks[j].mz), static_cast<uint32_t>(i),
+                              static_cast<uint32_t>(j)});
+      }
+    }
+  }
+  if (candidates.empty()) return 0.0f;
+  std::sort(candidates.begin(), candidates.end(), [&](const Candidate& x, const Candidate& y) {
+    if (x.difference != y.difference) return x.difference < y.difference;
+    if (x.first != y.first) return a.peaks[x.first].original_index < a.peaks[y.first].original_index;
+    return b.peaks[x.second].original_index < b.peaks[y.second].original_index;
+  });
+
+  used_a.assign(a.peaks.size(), 0);
+  used_b.assign(b.peaks.size(), 0);
   double dot = 0.0;
   double matched_norm_a = 0.0;
-  std::size_t i = 0, j = 0;
-  while (i < a.bins.size() && j < b.bins.size()) {
-    if (a.bins[i].first < b.bins[j].first) {
-      ++i;
-    } else if (b.bins[j].first < a.bins[i].first) {
-      ++j;
-    } else {
-      dot += a.bins[i].second * b.bins[j].second;
-      matched_norm_a += a.bins[i].second * a.bins[i].second;
-      ++i;
-      ++j;
-    }
+  for (const auto& candidate : candidates) {
+    if (used_a[candidate.first] || used_b[candidate.second]) continue;
+    used_a[candidate.first] = used_b[candidate.second] = 1;
+    double intensity_a = a.peaks[candidate.first].intensity;
+    dot += intensity_a * b.peaks[candidate.second].intensity;
+    matched_norm_a += intensity_a * intensity_a;
   }
   double norm_a = method == Method::ReverseCosine ? matched_norm_a : a.norm;
   double denominator = std::sqrt(norm_a * b.norm);
@@ -80,12 +158,12 @@ float score(const BinnedSpectrum& a, const BinnedSpectrum& b, Method method) {
   return static_cast<float>(value);
 }
 
-std::vector<BinnedSpectrum> bin_all(const MSDataset& dataset, const Options& options) {
-  std::vector<BinnedSpectrum> binned(static_cast<std::size_t>(dataset.size()));
+std::vector<PreparedSpectrum> prepare_all(const MSDataset& dataset, const Options& options) {
+  std::vector<PreparedSpectrum> prepared(static_cast<std::size_t>(dataset.size()));
   for (int64_t i = 0; i < dataset.size(); ++i) {
-    binned[static_cast<std::size_t>(i)] = bin_spectrum(dataset.peaks().spectrum(i), options);
+    prepared[static_cast<std::size_t>(i)] = prepare_spectrum(dataset.peaks().spectrum(i), options);
   }
-  return binned;
+  return prepared;
 }
 
 unsigned thread_count(const Options& options, int64_t work) {
@@ -169,25 +247,26 @@ std::vector<float> pair_scores(const MSDataset& ds1, const std::vector<int64_t>&
   check_positions(index1, ds1.size(), "index1");
   check_positions(index2, ds2.size(), "index2");
 
-  // Bin only the spectra that are used.
-  auto bin_used = [&](const MSDataset& dataset, const std::vector<int64_t>& index) {
-    std::unordered_map<int64_t, BinnedSpectrum> binned;
+  // Prepare only the spectra that are used.
+  auto prepare_used = [&](const MSDataset& dataset, const std::vector<int64_t>& index) {
+    std::unordered_map<int64_t, PreparedSpectrum> prepared;
     for (int64_t position : index) {
-      if (binned.count(position) == 0) {
-        binned.emplace(position, bin_spectrum(dataset.peaks().spectrum(position), options));
+      if (prepared.count(position) == 0) {
+        prepared.emplace(position, prepare_spectrum(dataset.peaks().spectrum(position), options));
       }
     }
-    return binned;
+    return prepared;
   };
-  auto binned1 = bin_used(ds1, index1);
-  auto binned2 = bin_used(ds2, index2);
+  auto prepared1 = prepare_used(ds1, index1);
+  auto prepared2 = prepare_used(ds2, index2);
+  const Tolerance tolerance(options);
 
   const int64_t n = static_cast<int64_t>(index1.size());
   std::vector<float> scores(static_cast<std::size_t>(n));
   parallel_ranges(n, thread_count(options, n), [&](int64_t begin, int64_t end) {
     for (int64_t k = begin; k < end; ++k) {
       auto u = static_cast<std::size_t>(k);
-      scores[u] = score(binned1.at(index1[u]), binned2.at(index2[u]), options.method);
+      scores[u] = score(prepared1.at(index1[u]), prepared2.at(index2[u]), tolerance, options.method);
     }
   });
   return scores;
@@ -196,16 +275,17 @@ std::vector<float> pair_scores(const MSDataset& ds1, const std::vector<int64_t>&
 std::vector<float> all_pairs_matrix(const MSDataset& ds1, const MSDataset& ds2,
                                     const Options& options) {
   validate(options);
-  auto binned1 = bin_all(ds1, options);
-  auto binned2 = bin_all(ds2, options);
+  auto prepared1 = prepare_all(ds1, options);
+  auto prepared2 = prepare_all(ds2, options);
+  const Tolerance tolerance(options);
   const int64_t n1 = ds1.size(), n2 = ds2.size();
   std::vector<float> matrix(static_cast<std::size_t>(n1 * n2));
   parallel_ranges(n1, thread_count(options, n1 * n2), [&](int64_t begin, int64_t end) {
     for (int64_t i = begin; i < end; ++i) {
       for (int64_t j = 0; j < n2; ++j) {
         matrix[static_cast<std::size_t>(i * n2 + j)] =
-            score(binned1[static_cast<std::size_t>(i)], binned2[static_cast<std::size_t>(j)],
-                  options.method);
+            score(prepared1[static_cast<std::size_t>(i)], prepared2[static_cast<std::size_t>(j)],
+                  tolerance, options.method);
       }
     }
   });
@@ -295,8 +375,9 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
   }
   const int64_t n_query = query.size(), n_reference = reference.size();
   const int64_t total = n_query * n_reference;
-  auto binned_query = bin_all(query, options);
-  auto binned_reference = bin_all(reference, options);
+  auto prepared_query = prepare_all(query, options);
+  auto prepared_reference = prepare_all(reference, options);
+  const Tolerance tolerance(options);
 
   // Hits of each query row, filled in parallel, joined in order.
   std::vector<std::vector<std::pair<int64_t, float>>> hits(static_cast<std::size_t>(n_query));
@@ -309,8 +390,9 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
       for (int64_t q = start + begin; q < start + end; ++q) {
         auto& row = hits[static_cast<std::size_t>(q)];
         for (int64_t r = 0; r < n_reference; ++r) {
-          float s = score(binned_query[static_cast<std::size_t>(q)],
-                          binned_reference[static_cast<std::size_t>(r)], options.method);
+          float s = score(prepared_query[static_cast<std::size_t>(q)],
+                          prepared_reference[static_cast<std::size_t>(r)], tolerance,
+                          options.method);
           if (s >= threshold) row.emplace_back(r, s);
         }
       }

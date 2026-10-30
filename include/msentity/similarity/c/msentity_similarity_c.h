@@ -38,7 +38,8 @@ extern "C" {
 typedef struct mssim_options {
   int32_t method;            /* MSSIM_METHOD_* */
   int32_t threads;           /* 0 = all hardware threads */
-  double bin_width;          /* > 0, default 0.01 */
+  double mz_tolerance_da;    /* >= 0, default 0.01; 0 disables */
+  double mz_tolerance_ppm;   /* >= 0, default 0; 0 disables */
   double intensity_exponent; /* > 0, default 1.0 */
 } mssim_options;
 

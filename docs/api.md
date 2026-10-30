@@ -23,7 +23,9 @@ namespace sim = msentity::similarity;
 ```cpp
 sim::Options options;                       // defaults:
 options.method = sim::Method::Cosine;       //   Cosine or ReverseCosine
-options.bin_width = 0.01;                   //   m/z bin width, > 0
+options.mz_tolerance_da = 0.01;             //   m/z tolerance in Da, >= 0 (0 = off)
+options.mz_tolerance_ppm = 0.0;             //   m/z tolerance in ppm, >= 0 (0 = off);
+                                            //   peaks match within either, see similarity.md
 options.intensity_exponent = 1.0;           //   intensity^exponent before scoring, > 0
 options.threads = 0;                        //   0 = all hardware threads
 ```
@@ -174,7 +176,7 @@ otherwise); an unknown key column throws `KeyError`.
 
 | Exception | When |
 |---|---|
-| `std::invalid_argument` | bad options (`bin_width <= 0`, threshold outside [0, 1], unknown method), duplicate keys, invalid tables or metadata, wrong file extension |
+| `std::invalid_argument` | bad options (negative or non-finite tolerance, both tolerances 0, threshold outside [0, 1], unknown method), duplicate keys, invalid tables or metadata, wrong file extension |
 | `std::out_of_range` | a spectrum position or row out of range |
 | `msentity::KeyError` | unknown column |
 | `msentity::FormatError` | not an `.mssim` file, unsupported schema version, or the file cannot be opened or written (message starting with `HDF5 error: cannot open` / `cannot create`) |
@@ -194,5 +196,6 @@ $ mssim-tool export hits.mssim hits.tsv
 ```
 
 Options for `search` and `by-key`: `--method cosine|reverse_cosine`,
-`--bin-width W`, `--exponent E`, `--threads N`; `search` embeds the spectra
+`--mz-tolerance-da D`, `--mz-tolerance-ppm P` (`--bin-width` is the former name
+of `--mz-tolerance-da`), `--exponent E`, `--threads N`; `search` embeds the spectra
 unless `--lightweight` is given, `by-key` only with `--embed`.

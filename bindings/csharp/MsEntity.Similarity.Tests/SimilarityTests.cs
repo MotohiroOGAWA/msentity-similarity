@@ -12,7 +12,7 @@ public class SimilarityTests
         Path.GetFullPath(Path.Combine(Repo, "../msentity/tests/data"));
     private static readonly string Sample = Path.Combine(MsEntityData, "sample.msp");
 
-    // Reference values for sample.msp, cosine, bin width 0.01.
+    // Reference values for sample.msp, cosine, m/z tolerance 0.01 Da.
     private static readonly float[] Row0 =
         { 1.0f, 0.7569831609725952f, 0.85833740234375f, 0.6929314732551575f, 0.6837769150733948f };
 
@@ -27,6 +27,13 @@ public class SimilarityTests
             new SimilarityOptions(Method: SimilarityMethod.ReverseCosine));
         Assert.Equal(0.7586880922317505f, scores[0], 1e-6f);
         Assert.Equal(0.31010058522224426f, scores[1], 1e-6f);
+        // ppm only (0 Da turns the Da rule off).
+        var ppm = SpectrumSimilarity.PairScores(ds, new long[] { 0, 2 }, ds, new long[] { 1, 4 },
+            new SimilarityOptions(MzToleranceDa: 0, MzTolerancePpm: 20));
+        Assert.Equal(0.756983145f, ppm[0], 1e-6f);
+        Assert.Equal(0.259379433f, ppm[1], 1e-6f);
+        Assert.Throws<SimilarityArgumentException>(() =>
+            SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions(MzToleranceDa: 0)));
         Assert.Throws<SimilarityArgumentException>(() =>
             SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions(BinWidth: 0)));
         Assert.Throws<SimilarityPositionException>(() =>

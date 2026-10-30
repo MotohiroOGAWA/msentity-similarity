@@ -12,11 +12,15 @@
 
 namespace msentity::similarity {
 
-// Binned spectrum similarity (docs/similarity.md).
+// Tolerance-based spectrum similarity (docs/similarity.md).
 //
-// Each spectrum becomes a sparse vector: peak m/z is binned as
-// floor(mz / bin_width), negative intensities become 0, intensities are
-// raised to intensity_exponent and summed per bin.
+// Negative intensities become 0 and intensities are raised to
+// intensity_exponent. Peaks of the two spectra are then paired one-to-one:
+// two peaks can pair when
+//   |mz1 - mz2| <= mz_tolerance_da   or
+//   |mz1 - mz2| / ((mz1 + mz2) / 2) * 1e6 <= mz_tolerance_ppm,
+// and pairs are taken in order of increasing |mz1 - mz2| (ties: original peak
+// order), each peak at most once.
 //   cosine          dot / sqrt(|a|² |b|²)
 //   reverse_cosine  dot / sqrt(|a matched|² |b|²) — peaks of the first
 //                   (query) spectrum without a partner in the second do not
@@ -30,7 +34,9 @@ Method parse_method(const std::string& name);
 
 struct Options {
   Method method = Method::Cosine;
-  double bin_width = 0.01;           // m/z bin width (> 0)
+  double mz_tolerance_da = 0.01;     // m/z tolerance in Da (>= 0; 0 = Da rule off)
+  double mz_tolerance_ppm = 0.0;     // m/z tolerance in ppm (>= 0; 0 = ppm rule off);
+                                     // at least one of the two must be positive
   double intensity_exponent = 1.0;   // e.g. 0.5 for square-root intensities (> 0)
   int threads = 0;                   // worker threads; 0 = all hardware threads
 };

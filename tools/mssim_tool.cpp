@@ -5,8 +5,9 @@
 //   mssim-tool info <input.mssim>                         size, columns, metadata, scores as JSON
 //   mssim-tool export <input.mssim> <output.csv|.tsv|.parquet>
 //
-// search and by-key also take [--method cosine|reverse_cosine] [--bin-width W]
-// [--exponent E] [--threads N]. Inputs are any format msentity reads
+// search and by-key also take [--method cosine|reverse_cosine] [--mz-tolerance-da D]
+// [--mz-tolerance-ppm P] [--exponent E] [--threads N]; --bin-width W is the former
+// name of --mz-tolerance-da. Inputs are any format msentity reads
 // (.msp, .mgf, .msds, .tsv, .csv).
 
 #include <iostream>
@@ -29,7 +30,8 @@ int usage() {
                "  mssim-tool info <input.mssim>\n"
                "  mssim-tool export <input.mssim> <output.csv|.tsv|.parquet>\n"
                "options for search and by-key:\n"
-               "  --method cosine|reverse_cosine  --bin-width W  --exponent E  --threads N\n";
+               "  --method cosine|reverse_cosine  --mz-tolerance-da D  --mz-tolerance-ppm P\n"
+               "  --exponent E  --threads N   (peaks match within D Da or P ppm; 0 turns one off)\n";
   return 2;
 }
 
@@ -71,8 +73,10 @@ int main(int argc, char** argv) {
         threshold = std::stod(args[++i]);
       } else if (args[i] == "--method" && has_value) {
         options.method = sim::parse_method(args[++i]);
-      } else if (args[i] == "--bin-width" && has_value) {
-        options.bin_width = std::stod(args[++i]);
+      } else if ((args[i] == "--mz-tolerance-da" || args[i] == "--bin-width") && has_value) {
+        options.mz_tolerance_da = std::stod(args[++i]);
+      } else if (args[i] == "--mz-tolerance-ppm" && has_value) {
+        options.mz_tolerance_ppm = std::stod(args[++i]);
       } else if (args[i] == "--exponent" && has_value) {
         options.intensity_exponent = std::stod(args[++i]);
       } else if (args[i] == "--threads" && has_value) {

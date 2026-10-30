@@ -61,7 +61,8 @@ class Options(ctypes.Structure):
     _fields_ = [
         ("method", ctypes.c_int32),
         ("threads", ctypes.c_int32),
-        ("bin_width", ctypes.c_double),
+        ("mz_tolerance_da", ctypes.c_double),
+        ("mz_tolerance_ppm", ctypes.c_double),
         ("intensity_exponent", ctypes.c_double),
     ]
 

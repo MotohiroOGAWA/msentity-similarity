@@ -41,7 +41,8 @@ TEST(CApi, AllPairsAndPairScores) {
   mssim_options options;
   mssim_default_options(&options);
   EXPECT_EQ(options.method, MSSIM_METHOD_COSINE);
-  EXPECT_DOUBLE_EQ(options.bin_width, 0.01);
+  EXPECT_DOUBLE_EQ(options.mz_tolerance_da, 0.01);
+  EXPECT_DOUBLE_EQ(options.mz_tolerance_ppm, 0.0);
 
   std::vector<float> matrix(25);
   ASSERT_EQ(mssim_all_pairs(bytes.data(), bytes.size(), bytes.data(), bytes.size(), &options,

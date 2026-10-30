@@ -22,7 +22,8 @@ internal struct NativeOptions
 {
     public int Method;
     public int Threads;
-    public double BinWidth;
+    public double MzToleranceDa;
+    public double MzTolerancePpm;
     public double IntensityExponent;
 }
 

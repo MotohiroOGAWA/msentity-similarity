@@ -5,7 +5,7 @@ namespace MsEntity.Similarity;
 /// <summary>The scoring method.</summary>
 public enum SimilarityMethod
 {
-    /// <summary>Binned cosine similarity.</summary>
+    /// <summary>Tolerance-based cosine similarity.</summary>
     Cosine = 0,
     /// <summary>Cosine where the query norm counts only peaks matched in the reference.</summary>
     ReverseCosine = 1,
@@ -13,20 +13,25 @@ public enum SimilarityMethod
 
 /// <summary>Score settings.</summary>
 /// <param name="Method">Cosine or reverse cosine.</param>
-/// <param name="BinWidth">m/z bin width (&gt; 0); peaks are binned by floor(mz / BinWidth).</param>
+/// <param name="MzToleranceDa">Absolute m/z tolerance in Da; 0 disables it.</param>
+/// <param name="MzTolerancePpm">Symmetric m/z tolerance in ppm; 0 disables it.</param>
 /// <param name="IntensityExponent">Intensities are raised to this power (&gt; 0) before scoring.</param>
 /// <param name="Threads">Worker threads; 0 = all hardware threads.</param>
+/// <param name="BinWidth">Former name of <paramref name="MzToleranceDa"/>; overrides it when set.</param>
 public sealed record SimilarityOptions(
     SimilarityMethod Method = SimilarityMethod.Cosine,
-    double BinWidth = 0.01,
+    double MzToleranceDa = 0.01,
+    double MzTolerancePpm = 0.0,
     double IntensityExponent = 1.0,
-    int Threads = 0)
+    int Threads = 0,
+    double? BinWidth = null)
 {
     internal NativeOptions ToNative() => new()
     {
         Method = (int)Method,
         Threads = Threads,
-        BinWidth = BinWidth,
+        MzToleranceDa = BinWidth ?? MzToleranceDa,
+        MzTolerancePpm = MzTolerancePpm,
         IntensityExponent = IntensityExponent,
     };
 }

@@ -44,7 +44,8 @@ json source(const MSDataset& dataset, const std::string& path, const std::string
 
 json parameters(const Options& options) {
   return {{"method", method_name(options.method)},
-          {"bin_width", options.bin_width},
+          {"mz_tolerance_da", options.mz_tolerance_da},
+          {"mz_tolerance_ppm", options.mz_tolerance_ppm},
           {"intensity_exponent", options.intensity_exponent}};
 }
 
@@ -60,7 +61,7 @@ SimilarityDataset calculate_similarity(const MSDataset& ds1, const MSDataset& ds
   json metadata = {
       {"created_at", now_utc()},
       {"mode", "by_key"},
-      {"algorithm", "binned_" + method_name(options.method) + "_similarity_by_key"},
+      {"algorithm", "tolerance_" + method_name(options.method) + "_similarity_by_key"},
       {"parameters", params},
       {"matching", "unique_intersection"},
       {"sources", json::array({source(ds1, source1, "first"), source(ds2, source2, "second")})},
@@ -87,7 +88,7 @@ SimilarityDataset calculate_library_search(const MSDataset& query, const MSDatas
   json metadata = {
       {"created_at", now_utc()},
       {"mode", "library_search"},
-      {"algorithm", "binned_" + method_name(options.method) + "_similarity_library_search"},
+      {"algorithm", "tolerance_" + method_name(options.method) + "_similarity_library_search"},
       {"parameters", params},
       {"matching", "all_pairs_at_or_above_threshold"},
       {"sources", json::array({source(query, query_source, "query"),

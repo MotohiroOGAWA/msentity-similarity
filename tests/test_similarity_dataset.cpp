@@ -152,7 +152,7 @@ TEST(Calculate, MetadataDescribesTheCalculation) {
   EXPECT_FALSE(result.has_matched_data());
   auto metadata = nlohmann::json::parse(result.metadata_json());
   EXPECT_EQ(metadata["mode"], "by_key");
-  EXPECT_EQ(metadata["algorithm"], "binned_reverse_cosine_similarity_by_key");
+  EXPECT_EQ(metadata["algorithm"], "tolerance_reverse_cosine_similarity_by_key");
   EXPECT_EQ(metadata["parameters"]["key1"], "SpecID");
   EXPECT_EQ(metadata["sources"][1]["path"], "b.msp");
   EXPECT_EQ(metadata["sources"][1]["n_rows"], 3);

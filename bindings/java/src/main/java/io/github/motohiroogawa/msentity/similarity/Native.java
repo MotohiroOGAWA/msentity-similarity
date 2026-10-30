@@ -60,7 +60,8 @@ final class Native {
       MemoryLayout.structLayout(
           JAVA_INT.withName("method"),
           JAVA_INT.withName("threads"),
-          JAVA_DOUBLE.withName("bin_width"),
+          JAVA_DOUBLE.withName("mz_tolerance_da"),
+          JAVA_DOUBLE.withName("mz_tolerance_ppm"),
           JAVA_DOUBLE.withName("intensity_exponent"));
 
   // ---- loading ------------------------------------------------------------------------------

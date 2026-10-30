@@ -23,7 +23,7 @@ DATA = REPO / "tests" / "data"
 SAMPLE = Path(os.environ.get("MSENTITY_TEST_DATA_DIR", REPO.parent / "msentity" / "tests" / "data")) \
     / "sample.msp"
 
-# Reference values for sample.msp, cosine, bin width 0.01.
+# Reference values for sample.msp, cosine, m/z tolerance 0.01 Da.
 ROW0 = [1.0, 0.7569831609725952, 0.85833740234375, 0.6929314732551575, 0.6837769150733948]
 
 
@@ -38,6 +38,13 @@ class TestCalculation(unittest.TestCase):
         np.testing.assert_allclose(matrix[0], ROW0, atol=1e-6)
         scores = mss.pair_scores(self.ds, [0, 2], self.ds, [1, 4], method="reverse_cosine")
         np.testing.assert_allclose(scores, [0.7586880922317505, 0.31010058522224426], atol=1e-6)
+        # ppm only (0 Da turns the Da rule off), and Da or ppm.
+        scores = mss.pair_scores(self.ds, [0, 2], self.ds, [1, 4], mz_tolerance_da=0,
+                                 mz_tolerance_ppm=20)
+        np.testing.assert_allclose(scores, [0.756983145, 0.259379433], atol=1e-6)
+        scores = mss.pair_scores(self.ds, [0, 2], self.ds, [1, 4], method="reverse_cosine",
+                                 mz_tolerance_da=0.005, mz_tolerance_ppm=10, intensity_exponent=0.5)
+        np.testing.assert_allclose(scores, [0.912557488, 0.691342294], atol=1e-6)
         # Views and plain bytes are accepted too.
         np.testing.assert_allclose(mss.all_pairs(self.ds[[0]], self.ds.to_bytes())[0], ROW0,
                                    atol=1e-6)
@@ -46,7 +53,11 @@ class TestCalculation(unittest.TestCase):
         with self.assertRaises(mss.InvalidArgumentError):
             mss.all_pairs(self.ds, self.ds, method="dot")
         with self.assertRaises(mss.InvalidArgumentError):
-            mss.all_pairs(self.ds, self.ds, bin_width=0)
+            mss.all_pairs(self.ds, self.ds, mz_tolerance_da=0, mz_tolerance_ppm=0)
+        with self.assertRaises(mss.InvalidArgumentError):
+            mss.all_pairs(self.ds, self.ds, mz_tolerance_ppm=-1)
+        with self.assertWarns(DeprecationWarning), self.assertRaises(mss.InvalidArgumentError):
+            mss.all_pairs(self.ds, self.ds, bin_width=0)  # former name of mz_tolerance_da
         with self.assertRaises(mss.PositionError):
             mss.pair_scores(self.ds, [9], self.ds, [0])
         with self.assertRaises(mss.FormatError):

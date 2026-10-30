@@ -20,7 +20,7 @@ class SimilarityTest {
       Path.of(System.getProperty("msentity.data", "../../../msentity/tests/data"));
   static final Path SAMPLE = MSENTITY_DATA.resolve("sample.msp");
 
-  // Reference values for sample.msp, cosine, bin width 0.01.
+  // Reference values for sample.msp, cosine, m/z tolerance 0.01 Da.
   static final float[] ROW0 = {
     1.0f, 0.7569831609725952f, 0.85833740234375f, 0.6929314732551575f, 0.6837769150733948f
   };
@@ -39,6 +39,15 @@ class SimilarityTest {
               new long[] {1, 4},
               Options.defaults().withMethod(Options.Method.REVERSE_COSINE));
       assertArrayEquals(new float[] {0.7586880922317505f, 0.31010058522224426f}, scores, 1e-6f);
+      // ppm only (0 Da turns the Da rule off).
+      Options ppm = Options.defaults().withMzToleranceDa(0).withMzTolerancePpm(20);
+      assertArrayEquals(
+          new float[] {0.756983145f, 0.259379433f},
+          Similarity.pairScores(ds, new long[] {0, 2}, ds, new long[] {1, 4}, ppm),
+          1e-6f);
+      assertThrows(
+          SimilarityException.InvalidArgument.class,
+          () -> Similarity.allPairs(ds, ds, Options.defaults().withMzToleranceDa(0)));
       assertThrows(
           SimilarityException.InvalidArgument.class,
           () -> Similarity.allPairs(ds, ds, Options.defaults().withBinWidth(0)));
