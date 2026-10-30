@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "msentity-similarity"
-version = "1.0.1"
+version = "1.0.2"
 description = "Spectrum similarity and .mssim files (Python binding of msentity-similarity)"
 license = "MIT"
 requires-python = ">=3.10"
