@@ -163,7 +163,7 @@ jobs:
           git clone https://github.com/MotohiroOGAWA/msentity.git ../msentity-release
           git -C ../msentity-release checkout "$msentity_ref"
           msentity_version=$(sed -n 's/^  VERSION \([0-9.]*\)$/\1/p' ../msentity-release/CMakeLists.txt)
-          grep -q "msentity==$msentity_version" bindings/python/pyproject.toml
+          grep -q "msentity==1.0.1$msentity_version" bindings/python/pyproject.toml
           grep -A3 '<artifactId>msentity</artifactId>' bindings/java/pom.xml | grep -q "<version>$msentity_version</version>"
           grep -q "PackageReference Include=\"MsEntity\" Version=\"$msentity_version\"" \
             bindings/csharp/MsEntity.Similarity/MsEntity.Similarity.csproj

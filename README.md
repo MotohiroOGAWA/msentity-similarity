@@ -16,32 +16,94 @@ shared library.
 
 ## Installation
 
-For C and C++, consume the released source with CMake; the compatible
-`msentity` release is fetched automatically:
+Ready-made packages for Linux x64, Windows x64, and macOS arm64 are published
+with each [GitHub Release](https://github.com/MotohiroOGAWA/msentity-similarity/releases).
+`msentity-similarity` uses one pinned, compatible `msentity` release.
+
+| Platform | Python wheel tag | Java / C# / C platform |
+|---|---|---|
+| Linux x64 (glibc ≥ 2.35) | `manylinux_2_35_x86_64` | `linux-x64` |
+| Windows x64 | `win_amd64` | `win-x64` |
+| macOS arm64 (Apple silicon, macOS ≥ 14) | `macosx_14_0_arm64` | `osx-arm64` |
+
+| Language | Install |
+|---|---|
+| C | Download `msentity-similarity-c-<version>-<platform>.zip` from the latest GitHub Release |
+| C++ | Use CMake `FetchContent` with a release tag; the compatible msentity source is fetched automatically |
+| Python | `pip install msentity-similarity --find-links https://motohiroogawa.github.io/msentity-similarity/` |
+| Java | Download both the msentity and msentity-similarity JARs from their GitHub Releases |
+| C# | Download both NuGet packages from their GitHub Releases and use the download directory as a package source |
+
+### C
+
+Download the archive for the current platform from the
+[latest release](https://github.com/MotohiroOGAWA/msentity-similarity/releases/latest).
+It contains the similarity and msentity C headers and native libraries.
+
+### C++
+
+Replace `<tag>` with the release to use, for example `v0.1.0`:
 
 ```cmake
 include(FetchContent)
 FetchContent_Declare(msentity_similarity
   GIT_REPOSITORY https://github.com/MotohiroOGAWA/msentity-similarity.git
-  GIT_TAG v0.1.0)
+  GIT_TAG <tag>)
 FetchContent_MakeAvailable(msentity_similarity)
 target_link_libraries(app PRIVATE msentity::similarity)
 ```
 
-For Python, the package installs the compatible released `msentity`
-automatically:
+### Python (≥ 3.10)
+
+Without a version, pip installs the latest release listed on the GitHub Pages
+wheel index. The compatible msentity wheel is installed automatically:
 
 ```console
 pip install msentity-similarity \
   --find-links https://motohiroogawa.github.io/msentity-similarity/
-# Reproducible install:
-pip install msentity-similarity==0.1.0 \
+```
+
+Pin a version for reproducible environments:
+
+```console
+pip install msentity-similarity==<version> \
   --find-links https://motohiroogawa.github.io/msentity-similarity/
 ```
 
-Installation for all languages is in [docs/install.md](docs/install.md).
-Release assets also provide a Java JAR, a C# NuGet package, and C API archives
-with the native libraries bundled for Linux x64, Windows x64, and macOS arm64.
+### Java (≥ 22)
+
+Download the latest msentity and similarity JARs with GitHub CLI:
+
+```console
+mkdir -p lib
+gh release download --repo MotohiroOGAWA/msentity \
+  --pattern 'msentity-*.jar' --dir lib
+gh release download --repo MotohiroOGAWA/msentity-similarity \
+  --pattern 'msentity-similarity-*.jar' --dir lib
+java --enable-native-access=ALL-UNNAMED -cp 'app.jar:lib/*' app.Main
+```
+
+Pass a tag immediately after `gh release download`, such as
+`gh release download v0.1.0 ...`, to select a fixed version. The JARs contain
+the native libraries for all supported platforms.
+
+### C# (.NET ≥ 8)
+
+Download both packages into one local source, then install similarity:
+
+```console
+mkdir -p packages
+gh release download --repo MotohiroOGAWA/msentity \
+  --pattern 'MsEntity.*.nupkg' --dir packages
+gh release download --repo MotohiroOGAWA/msentity-similarity \
+  --pattern 'MsEntity.Similarity.*.nupkg' --dir packages
+dotnet add package MsEntity.Similarity --source ./packages
+```
+
+Add `--version <version>` to the final command for a fixed release. The NuGet
+packages contain native libraries under `runtimes/<rid>/native/`.
+
+More details and source-build instructions: [docs/install.md](docs/install.md).
 
 ## Example
 
