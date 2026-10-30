@@ -33,7 +33,8 @@ jobs:
             library: msentity_similarity_c.dll
             built: build/bin/Release/msentity_similarity_c.dll
             msentity_library: msentity_c.dll
-            msentity_built: build/_deps/msentity-build/bin/Release/msentity_c.dll
+            # msentity inherits the top-level CMAKE_RUNTIME_OUTPUT_DIRECTORY.
+            msentity_built: build/bin/Release/msentity_c.dll
             import_library: build/Release/msentity_similarity_c.lib
             msentity_import_library: build/_deps/msentity-build/Release/msentity_c.lib
             wheel_tag: win_amd64
