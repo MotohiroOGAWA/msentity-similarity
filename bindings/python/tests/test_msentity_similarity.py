@@ -70,8 +70,9 @@ class TestCalculation(unittest.TestCase):
 
         self.assertTrue(result.has_matched_data)
         query, reference = result.match_records(2)  # pair (1, 4)
-        self.assertEqual(query["Name"], self.ds[1]["Name"])
-        self.assertEqual(reference["Name"], self.ds[4]["Name"])
+        # msentity preserves the source header spelling; sample.msp uses NAME.
+        self.assertEqual(query["NAME"], self.ds[1]["NAME"])
+        self.assertEqual(reference["NAME"], self.ds[4]["NAME"])
         np.testing.assert_array_equal(reference.mz, self.ds[4].mz)
         self.assertEqual(list(result.source_indices(2)), [0, 1, 4, 2, 3])
 

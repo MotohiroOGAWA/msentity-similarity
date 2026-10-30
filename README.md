@@ -14,6 +14,31 @@ shared library.
 | Languages | C++, C, Python (`msentity_similarity`), Java (`io.github.motohiroogawa.msentity.similarity`), C# (`MsEntity.Similarity`) |
 | Depends on | msentity (fetched by CMake), C++20, CMake ≥ 3.21 |
 
+## Installation
+
+For C and C++, consume the released source with CMake; the compatible
+`msentity` release is fetched automatically:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(msentity_similarity
+  GIT_REPOSITORY https://github.com/MotohiroOGAWA/msentity-similarity.git
+  GIT_TAG v0.1.0)
+FetchContent_MakeAvailable(msentity_similarity)
+target_link_libraries(app PRIVATE msentity::similarity)
+```
+
+For Python, the package installs the compatible released `msentity`
+automatically:
+
+```console
+pip install msentity-similarity
+# Reproducible install:
+pip install msentity-similarity==0.1.0
+```
+
+Installation for all languages is in [docs/install.md](docs/install.md).
+
 ## Example
 
 ```python
@@ -50,7 +75,7 @@ $ mssim-tool search example.msp example.msp hits.mssim --threshold 0.7
 4 pairs written to hits.mssim
 ```
 
-## Building
+## Building from source
 
 ```console
 cmake -S . -B build -G Ninja

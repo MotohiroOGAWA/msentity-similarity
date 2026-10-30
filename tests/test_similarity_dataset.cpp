@@ -87,8 +87,9 @@ TEST(SimilarityDataset, SaveCompactsMatchedData) {
   EXPECT_EQ(loaded.matched_source_indices()->first, (std::vector<int64_t>{1}));
   EXPECT_EQ(loaded.matched_source_indices()->second, (std::vector<int64_t>{1, 4}));
   auto [query, reference] = loaded.match_records(1);
-  EXPECT_EQ(std::get<std::string>(reference.value(0, "Name")),
-            std::get<std::string>(ds.value(4, "Name")));
+  // Text readers preserve source header spelling by default; sample.msp uses NAME.
+  EXPECT_EQ(std::get<std::string>(reference.value(0, "NAME")),
+            std::get<std::string>(ds.value(4, "NAME")));
 }
 
 TEST(SimilarityDataset, LightweightRoundTripAndErrors) {

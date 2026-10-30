@@ -66,8 +66,9 @@ class SimilarityTest {
         assertTrue(result.hasMatchedData());
         assertArrayEquals(new long[] {0, 1, 4, 2, 3}, result.sourceIndices(2));
         try (SimilarityDataset.Match match = result.matchRecords(2)) { // pair (1, 4)
-          assertEquals(ds.value(1, "Name"), match.first().value(0, "Name"));
-          assertEquals(ds.value(4, "Name"), match.second().value(0, "Name"));
+          // msentity preserves the source header spelling; sample.msp uses NAME.
+          assertEquals(ds.value(1, "NAME"), match.first().value(0, "NAME"));
+          assertEquals(ds.value(4, "NAME"), match.second().value(0, "NAME"));
           assertArrayEquals(ds.spectrum(4).mz(), match.second().spectrum(0).mz());
         }
       }

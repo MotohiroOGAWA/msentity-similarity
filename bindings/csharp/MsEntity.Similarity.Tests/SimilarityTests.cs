@@ -52,8 +52,9 @@ public class SimilarityTests
         using (first)
         using (second)
         {
-            Assert.Equal(ds.GetValue(1, "Name"), first.GetValue(0, "Name"));
-            Assert.Equal(ds.GetValue(4, "Name"), second.GetValue(0, "Name"));
+            // msentity preserves the source header spelling; sample.msp uses NAME.
+            Assert.Equal(ds.GetValue(1, "NAME"), first.GetValue(0, "NAME"));
+            Assert.Equal(ds.GetValue(4, "NAME"), second.GetValue(0, "NAME"));
         }
     }
 
