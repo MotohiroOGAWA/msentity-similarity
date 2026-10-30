@@ -192,7 +192,7 @@ TEST(CApi, ByKeyLoadAndErrors) {
   Result missing;
   EXPECT_EQ(mssim_load(tmp.file("none.mssim").c_str(), &missing.handle), MSENTITY_ERR_IO);
   EXPECT_EQ(mssim_save(nullptr, csv.c_str()), MSENTITY_ERR_INVALID_ARGUMENT);
-  EXPECT_STREQ(mssim_version(), "1.1.1");
+  EXPECT_STREQ(mssim_version(), "1.1.2");
 }
 
 }  // namespace
