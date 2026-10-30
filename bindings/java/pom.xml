@@ -6,7 +6,7 @@
 
   <groupId>io.github.motohiroogawa</groupId>
   <artifactId>msentity-similarity</artifactId>
-  <version>1.0.3</version>
+  <version>1.0.4</version>
   <name>msentity-similarity</name>
   <description>Java binding of msentity-similarity (spectrum similarity and .mssim files)</description>
 
