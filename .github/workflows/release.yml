@@ -169,7 +169,7 @@ jobs:
           import tomllib
           from pathlib import Path
 
-          expected = f"msentity=={sys.argv[1]}"
+          expected = f"msentity==1.0.1{sys.argv[1]}"
           project = tomllib.loads(Path("bindings/python/pyproject.toml").read_text())["project"]
           if expected not in project["dependencies"]:
               raise SystemExit(f"Python dependency must contain {expected!r}")
