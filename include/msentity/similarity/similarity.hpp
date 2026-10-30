@@ -7,5 +7,5 @@
 #include <msentity/similarity/similarity_dataset.hpp>
 
 namespace msentity::similarity {
-inline constexpr const char* kVersion = "1.1.2";
+inline constexpr const char* kVersion = "1.1.3";
 }
