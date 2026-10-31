@@ -8,7 +8,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <RootNamespace>MsEntity.Similarity</RootNamespace>
     <PackageId>MsEntity.Similarity</PackageId>
-    <Version>1.1.3</Version>
+    <Version>1.2.0</Version>
     <Description>.NET binding of msentity-similarity (spectrum similarity and .mssim files)</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
@@ -21,7 +21,7 @@
     <ProjectReference Include="$(MsEntityProject)" />
   </ItemGroup>
   <ItemGroup Condition="!Exists('$(MsEntityProject)') Or '$(UseMsEntityPackage)' == 'true'">
-    <PackageReference Include="MsEntity" Version="1.1.2" />
+    <PackageReference Include="MsEntity" Version="1.2.0" />
   </ItemGroup>
 
   <!-- Native libraries collected by CI (bindings/natives/<rid>/) are packed as
