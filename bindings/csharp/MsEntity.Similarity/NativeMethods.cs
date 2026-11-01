@@ -73,6 +73,10 @@ internal static class NativeMethods
     [DllImport(Library, CallingConvention = Cdecl)] public static extern void mssim_string_free(IntPtr text);
     [DllImport(Library, CallingConvention = Cdecl)] public static extern void mssim_bytes_free(IntPtr data);
     [DllImport(Library, CallingConvention = Cdecl)] public static extern unsafe void mssim_values_clear(NativeValue* values, long n);
+    [DllImport(Library, CallingConvention = Cdecl)]
+    public static extern int mssim_parse_mz_tolerance([MarshalAs(Utf8)] string text, ref NativeOptions options);
+    [DllImport(Library, CallingConvention = Cdecl)]
+    public static extern int mssim_format_mz_tolerance(in NativeOptions options, out IntPtr text);
 
     [DllImport(Library, CallingConvention = Cdecl)]
     public static extern unsafe int mssim_pair_scores(byte* ds1, long ds1Size, long* index1, byte* ds2, long ds2Size,

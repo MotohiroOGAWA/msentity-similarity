@@ -30,9 +30,11 @@ mss.pair_scores(ds, [0, 1], ds, [1, 0])          # array([0.75971437, 0.75971437
 mss.all_pairs(ds, ds, method="reverse_cosine")   # array([[1.        , 0.78809655],
                                                  #        [0.75971437, 1.        ]])
 # keyword options: method="cosine"|"reverse_cosine", mz_tolerance_da=0.01,
-#                  mz_tolerance_ppm=0.0, intensity_exponent=1.0, threads=0
+#                  mz_tolerance_ppm=10.0, intensity_exponent=1.0, threads=0
 mss.all_pairs(ds, ds, mz_tolerance_da=0, mz_tolerance_ppm=10)        # ppm only
-mss.all_pairs(ds, ds, mz_tolerance_da=0.01, mz_tolerance_ppm=10)     # within 0.01 Da or 10 ppm
+mss.all_pairs(ds, ds, **mss.parse_mz_tolerance("10ppm"))             # the same, from text
+mss.parse_mz_tolerance("0.01da,10PPM")   # {'mz_tolerance_da': 0.01, 'mz_tolerance_ppm': 10.0}
+mss.format_mz_tolerance(0.01, 10)        # '0.01Da,10ppm'
 
 # Library search → SimilarityDataset
 hits = mss.library_search(ds, ds, 0.7,
@@ -42,7 +44,7 @@ len(hits)                       # 4
 hits.columns                    # ['index1', 'index2', 'similarity', 'data_index1', 'data_index2']
 hits["similarity"]       # [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
 hits.metadata["parameters"]     # {'threshold': 0.7, 'method': 'cosine', 'mz_tolerance_da': 0.01,
-                                #  'mz_tolerance_ppm': 0.0, 'intensity_exponent': 1.0}
+                                #  'mz_tolerance_ppm': 10.0, 'intensity_exponent': 1.0}
 query, ref = hits.match_records(1)   # msentity.Record of each side
 query["Name"], ref["Name"]           # ('MassSpecID0000001', 'MassSpecID0000002')
 ref.mz                               # array([ 91.0542, 125.0233, 246.1125])
@@ -90,8 +92,9 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
   float[][] matrix = Similarity.allPairs(ds, ds,
       Options.defaults().withMethod(Options.Method.REVERSE_COSINE));
   // [[1.0, 0.78809655], [0.75971437, 1.0]]
-  // Within 0.01 Da or 10 ppm (withMzToleranceDa(0) for ppm only):
-  Similarity.allPairs(ds, ds, Options.defaults().withMzTolerancePpm(10));
+  // Defaults: within 0.01 Da or 10 ppm. From text (a unit left out becomes 0):
+  Similarity.allPairs(ds, ds, Options.defaults().withMzTolerance("10ppm"));   // ppm only
+  Options.defaults().formatMzTolerance();   // "0.01Da,10ppm"
 
   try (SimilarityDataset hits = Similarity.librarySearch(
            ds, ds, 0.7, Options.defaults(),
@@ -146,8 +149,9 @@ SpectrumSimilarity.PairScores(ds, new long[] { 0, 1 }, ds, new long[] { 1, 0 });
 float[,] matrix = SpectrumSimilarity.AllPairs(ds, ds,
     new SimilarityOptions(Method: SimilarityMethod.ReverseCosine));
 // { { 1, 0.78809655 }, { 0.75971437, 1 } }
-// Within 0.01 Da or 10 ppm (MzToleranceDa: 0 for ppm only):
-SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions(MzTolerancePpm: 10));
+// Defaults: within 0.01 Da or 10 ppm. From text (a unit left out becomes 0):
+SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions().WithMzTolerance("10ppm"));   // ppm only
+new SimilarityOptions().FormatMzTolerance();   // "0.01Da,10ppm"
 
 using var hits = SpectrumSimilarity.LibrarySearch(ds, ds, threshold: 0.7,
     querySource: "example.msp", progress: (done, total) => { });
@@ -199,7 +203,8 @@ uint8_t* bytes; int64_t size;
 msentity_to_msds_bytes(ds, &bytes, &size);       /* the dataset as .msds bytes */
 
 mssim_options options;
-mssim_default_options(&options);                 /* cosine, 0.01 Da, 0 ppm, 1.0, all threads */
+mssim_default_options(&options);                 /* cosine, 0.01 Da, 10 ppm, 1.0, all threads */
+mssim_parse_mz_tolerance("10ppm", &options);     /* optional: tolerances from text (here ppm only) */
 float matrix[4];
 mssim_all_pairs(bytes, size, bytes, size, &options, matrix, 4);
 /* matrix = {1, 0.759714, 0.759714, 1} */

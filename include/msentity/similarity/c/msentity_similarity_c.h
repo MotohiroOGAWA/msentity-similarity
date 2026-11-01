@@ -39,7 +39,7 @@ typedef struct mssim_options {
   int32_t method;            /* MSSIM_METHOD_* */
   int32_t threads;           /* 0 = all hardware threads */
   double mz_tolerance_da;    /* >= 0, default 0.01; 0 disables */
-  double mz_tolerance_ppm;   /* >= 0, default 0; 0 disables */
+  double mz_tolerance_ppm;   /* >= 0, default 10; 0 disables */
   double intensity_exponent; /* > 0, default 1.0 */
 } mssim_options;
 
@@ -55,6 +55,12 @@ MSSIM_C_API void mssim_string_free(char* text);
 MSSIM_C_API void mssim_bytes_free(uint8_t* data);
 MSSIM_C_API void mssim_values_clear(msentity_value* values, int64_t n);
 MSSIM_C_API void mssim_default_options(mssim_options* options);
+/* Sets mz_tolerance_da / mz_tolerance_ppm from text such as "0.01Da,10ppm",
+ * "10ppm", or "10 PPM, 0.01da" (a unit left out becomes 0); the other fields
+ * are unchanged. */
+MSSIM_C_API int32_t mssim_parse_mz_tolerance(const char* text, mssim_options* options);
+/* Canonical text of the two tolerances, e.g. "0.01Da,10ppm" (free with mssim_string_free). */
+MSSIM_C_API int32_t mssim_format_mz_tolerance(const mssim_options* options, char** out);
 
 /* ---- calculations ----------------------------------------------------------------- */
 /* Scores of ds1[index1[k]] vs ds2[index2[k]], k < n; out has n floats. */

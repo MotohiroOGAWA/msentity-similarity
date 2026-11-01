@@ -2,8 +2,12 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
+#include <iomanip>
 #include <limits>
+#include <locale>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -31,16 +35,20 @@ struct PreparedSpectrum {
   double norm = 0.0;
 };
 
-void validate(const Options& options) {
-  if (!std::isfinite(options.mz_tolerance_da) || options.mz_tolerance_da < 0) {
+void validate_mz_tolerance(double da, double ppm) {
+  if (!std::isfinite(da) || da < 0) {
     throw std::invalid_argument("mz_tolerance_da must be finite and >= 0");
   }
-  if (!std::isfinite(options.mz_tolerance_ppm) || options.mz_tolerance_ppm < 0) {
+  if (!std::isfinite(ppm) || ppm < 0) {
     throw std::invalid_argument("mz_tolerance_ppm must be finite and >= 0");
   }
-  if (options.mz_tolerance_da == 0 && options.mz_tolerance_ppm == 0) {
+  if (da == 0 && ppm == 0) {
     throw std::invalid_argument("at least one of mz_tolerance_da and mz_tolerance_ppm must be positive");
   }
+}
+
+void validate(const Options& options) {
+  validate_mz_tolerance(options.mz_tolerance_da, options.mz_tolerance_ppm);
   if (!std::isfinite(options.intensity_exponent) || options.intensity_exponent <= 0) {
     throw std::invalid_argument("intensity_exponent must be positive");
   }
@@ -235,6 +243,81 @@ Method parse_method(const std::string& name) {
   if (name == "cosine") return Method::Cosine;
   if (name == "reverse_cosine") return Method::ReverseCosine;
   throw std::invalid_argument("method must be 'cosine' or 'reverse_cosine'");
+}
+
+namespace {
+
+std::string trim(const std::string& text) {
+  auto space = [](unsigned char c) { return std::isspace(c) != 0; };
+  auto begin = std::find_if_not(text.begin(), text.end(), space);
+  auto end = std::find_if_not(text.rbegin(), std::string::const_reverse_iterator(begin), space).base();
+  return std::string(begin, end);
+}
+
+// A decimal number filling all of text, independent of the global locale.
+bool read_number(const std::string& text, double& value) {
+  std::istringstream in(text);
+  in.imbue(std::locale::classic());
+  in >> value;
+  return !in.fail() && in.peek() == std::char_traits<char>::eof();
+}
+
+// Shortest of 15 or 17 significant digits that reads back as value.
+std::string write_number(double value) {
+  std::string text;
+  for (int precision : {15, 17}) {
+    std::ostringstream out;
+    out.imbue(std::locale::classic());
+    out << std::setprecision(precision) << value;
+    text = out.str();
+    double back;
+    if (read_number(text, back) && back == value) break;
+  }
+  return text;
+}
+
+}  // namespace
+
+MzTolerance parse_mz_tolerance(const std::string& text) {
+  auto invalid = [&] {
+    return std::invalid_argument("m/z tolerance must look like '0.01Da', '10ppm', or '0.01Da,10ppm', got '" +
+                                 text + "'");
+  };
+  MzTolerance result;
+  bool has_da = false, has_ppm = false;
+  std::size_t start = 0;
+  while (true) {
+    std::size_t comma = text.find(',', start);
+    std::string term = trim(text.substr(start, comma == std::string::npos ? comma : comma - start));
+    std::size_t split = term.size();
+    while (split > 0 && std::isalpha(static_cast<unsigned char>(term[split - 1]))) --split;
+    std::string unit = term.substr(split);
+    std::transform(unit.begin(), unit.end(), unit.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    double value;
+    if (!read_number(trim(term.substr(0, split)), value)) throw invalid();
+    if (unit == "da" && !has_da) {
+      has_da = true;
+      result.da = value;
+    } else if (unit == "ppm" && !has_ppm) {
+      has_ppm = true;
+      result.ppm = value;
+    } else {
+      throw invalid();
+    }
+    if (comma == std::string::npos) break;
+    start = comma + 1;
+  }
+  validate_mz_tolerance(result.da, result.ppm);
+  return result;
+}
+
+std::string format_mz_tolerance(double da, double ppm) {
+  validate_mz_tolerance(da, ppm);
+  std::string text;
+  if (da > 0) text = write_number(da) + "Da";
+  if (ppm > 0) text += (text.empty() ? "" : ",") + write_number(ppm) + "ppm";
+  return text;
 }
 
 std::vector<float> pair_scores(const MSDataset& ds1, const std::vector<int64_t>& index1,

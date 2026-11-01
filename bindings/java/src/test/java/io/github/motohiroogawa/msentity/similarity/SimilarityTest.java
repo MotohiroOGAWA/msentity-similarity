@@ -26,6 +26,18 @@ class SimilarityTest {
   };
 
   @Test
+  void mzToleranceText() {
+    Options parsed = Options.defaults().withMzTolerance("10 PPM, 0.01da");
+    assertEquals(0.01, parsed.mzToleranceDa());
+    assertEquals(10.0, parsed.mzTolerancePpm());
+    assertEquals(0.0, Options.defaults().withMzTolerance("10ppm").mzToleranceDa());
+    assertEquals("0.01Da,10ppm", Options.defaults().formatMzTolerance());
+    assertEquals("10ppm", Options.defaults().withMzToleranceDa(0).formatMzTolerance());
+    assertThrows(
+        SimilarityException.InvalidArgument.class, () -> Options.defaults().withMzTolerance("0.01"));
+  }
+
+  @Test
   void allPairsAndPairScores() {
     try (Dataset ds = Dataset.load(SAMPLE)) {
       float[][] matrix = Similarity.allPairs(ds, ds);
@@ -47,7 +59,7 @@ class SimilarityTest {
           1e-6f);
       assertThrows(
           SimilarityException.InvalidArgument.class,
-          () -> Similarity.allPairs(ds, ds, Options.defaults().withMzToleranceDa(0)));
+          () -> Similarity.allPairs(ds, ds, Options.defaults().withMzToleranceDa(0).withMzTolerancePpm(0)));
       assertThrows(
           SimilarityException.PositionOutOfRange.class,
           () -> Similarity.pairScores(ds, new long[] {9}, ds, new long[] {0}));

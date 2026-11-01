@@ -5,9 +5,9 @@
 //   mssim-tool info <input.mssim>                         size, columns, metadata, scores as JSON
 //   mssim-tool export <input.mssim> <output.csv|.tsv|.parquet>
 //
-// search and by-key also take [--method cosine|reverse_cosine] [--mz-tolerance-da D]
-// [--mz-tolerance-ppm P] [--exponent E] [--threads N]. Inputs are any format
-// msentity reads (.msp, .mgf, .msds, .tsv, .csv).
+// search and by-key also take [--method cosine|reverse_cosine] [--mz-tolerance T]
+// [--exponent E] [--threads N], with T such as 0.01Da,10ppm (the default), 10ppm,
+// or 0.01Da. Inputs are any format msentity reads (.msp, .mgf, .msds, .tsv, .csv).
 
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -29,8 +29,8 @@ int usage() {
                "  mssim-tool info <input.mssim>\n"
                "  mssim-tool export <input.mssim> <output.csv|.tsv|.parquet>\n"
                "options for search and by-key:\n"
-               "  --method cosine|reverse_cosine  --mz-tolerance-da D  --mz-tolerance-ppm P\n"
-               "  --exponent E  --threads N   (peaks match within D Da or P ppm; 0 turns one off)\n";
+               "  --method cosine|reverse_cosine  --mz-tolerance T  --exponent E  --threads N\n"
+               "  (T: 0.01Da,10ppm (default), 10ppm, or 0.01Da; peaks match within either)\n";
   return 2;
 }
 
@@ -72,10 +72,10 @@ int main(int argc, char** argv) {
         threshold = std::stod(args[++i]);
       } else if (args[i] == "--method" && has_value) {
         options.method = sim::parse_method(args[++i]);
-      } else if (args[i] == "--mz-tolerance-da" && has_value) {
-        options.mz_tolerance_da = std::stod(args[++i]);
-      } else if (args[i] == "--mz-tolerance-ppm" && has_value) {
-        options.mz_tolerance_ppm = std::stod(args[++i]);
+      } else if (args[i] == "--mz-tolerance" && has_value) {
+        auto tolerance = sim::parse_mz_tolerance(args[++i]);
+        options.mz_tolerance_da = tolerance.da;
+        options.mz_tolerance_ppm = tolerance.ppm;
       } else if (args[i] == "--exponent" && has_value) {
         options.intensity_exponent = std::stod(args[++i]);
       } else if (args[i] == "--threads" && has_value) {

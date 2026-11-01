@@ -76,6 +76,7 @@ TEST(Score, PpmToleranceAndEitherRule) {
   EXPECT_FLOAT_EQ(pair_scores(a, {0, 1}, b, {0, 1}, ppm)[1], 0.0f);
   Options da;
   da.mz_tolerance_da = 0.005;
+  da.mz_tolerance_ppm = 0;
   EXPECT_EQ(pair_scores(a, {0, 1}, b, {0, 1}, da), (std::vector<float>{0.0f, 0.0f}));
   // Both set: a pair matches when either rule holds.
   Options either = da;
@@ -108,6 +109,7 @@ TEST(Score, Validation) {
   MSDataset a = spectra({{{100.0, 1.0}}});
   Options bad;
   bad.mz_tolerance_da = 0;  // and ppm 0: no tolerance at all
+  bad.mz_tolerance_ppm = 0;
   EXPECT_THROW(pair_scores(a, {0}, a, {0}, bad), std::invalid_argument);
   bad = {};
   bad.mz_tolerance_da = -0.01;
@@ -123,6 +125,31 @@ TEST(Score, Validation) {
   EXPECT_THROW(parse_method("dot"), std::invalid_argument);
   EXPECT_EQ(parse_method("reverse_cosine"), Method::ReverseCosine);
   EXPECT_EQ(method_name(Method::Cosine), "cosine");
+}
+
+TEST(Options, MzToleranceText) {
+  auto both = parse_mz_tolerance("0.01Da,10ppm");
+  EXPECT_DOUBLE_EQ(both.da, 0.01);
+  EXPECT_DOUBLE_EQ(both.ppm, 10.0);
+  auto reversed = parse_mz_tolerance(" 10 PPM , 0.01da ");
+  EXPECT_DOUBLE_EQ(reversed.da, 0.01);
+  EXPECT_DOUBLE_EQ(reversed.ppm, 10.0);
+  auto ppm = parse_mz_tolerance("10ppm");
+  EXPECT_EQ(ppm.da, 0.0);
+  EXPECT_DOUBLE_EQ(ppm.ppm, 10.0);
+  EXPECT_DOUBLE_EQ(parse_mz_tolerance("5e-3Da").da, 0.005);
+  for (const char* bad : {"", "0.01", "Da", "0.01Da,", "0.01Da,0.02Da", "-1Da", "0Da", "0Da,0ppm",
+                          "10mDa", "0.01 Da 10ppm", "nanDa", "0,01Da"}) {
+    EXPECT_THROW(parse_mz_tolerance(bad), std::invalid_argument) << bad;
+  }
+
+  EXPECT_EQ(format_mz_tolerance(0.01, 10), "0.01Da,10ppm");
+  EXPECT_EQ(format_mz_tolerance(0, 10), "10ppm");
+  EXPECT_EQ(format_mz_tolerance(0.01, 0), "0.01Da");
+  EXPECT_EQ(format_mz_tolerance(0.1 + 0.2, 0), "0.30000000000000004Da");
+  EXPECT_THROW(format_mz_tolerance(0, 0), std::invalid_argument);
+  Options defaults;
+  EXPECT_EQ(format_mz_tolerance(defaults.mz_tolerance_da, defaults.mz_tolerance_ppm), "0.01Da,10ppm");
 }
 
 // ---- reference values for msentity/tests/data/sample.msp -----------------------

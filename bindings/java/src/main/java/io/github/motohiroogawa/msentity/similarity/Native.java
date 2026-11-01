@@ -142,6 +142,8 @@ final class Native {
   static final MethodHandle stringFree = fn("mssim_string_free", null, P);
   static final MethodHandle bytesFree = fn("mssim_bytes_free", null, P);
   static final MethodHandle valuesClear = fn("mssim_values_clear", null, P, I64);
+  static final MethodHandle parseMzTolerance = fn("mssim_parse_mz_tolerance", I32, P, P);
+  static final MethodHandle formatMzTolerance = fn("mssim_format_mz_tolerance", I32, P, P);
 
   static final MethodHandle pairScores = fn("mssim_pair_scores", I32, P, I64, P, P, I64, P, I64, P, P);
   static final MethodHandle allPairs = fn("mssim_all_pairs", I32, P, I64, P, I64, P, P, I64);

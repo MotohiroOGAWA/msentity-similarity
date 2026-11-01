@@ -17,6 +17,18 @@ public class SimilarityTests
         { 1.0f, 0.7569831609725952f, 0.85833740234375f, 0.6929314732551575f, 0.6837769150733948f };
 
     [Fact]
+    public void MzToleranceText()
+    {
+        var parsed = new SimilarityOptions().WithMzTolerance("10 PPM, 0.01da");
+        Assert.Equal(0.01, parsed.MzToleranceDa);
+        Assert.Equal(10.0, parsed.MzTolerancePpm);
+        Assert.Equal(0.0, new SimilarityOptions().WithMzTolerance("10ppm").MzToleranceDa);
+        Assert.Equal("0.01Da,10ppm", new SimilarityOptions().FormatMzTolerance());
+        Assert.Equal("10ppm", new SimilarityOptions(MzToleranceDa: 0).FormatMzTolerance());
+        Assert.Throws<SimilarityArgumentException>(() => new SimilarityOptions().WithMzTolerance("0.01"));
+    }
+
+    [Fact]
     public void AllPairsAndPairScores()
     {
         using var ds = Dataset.Load(Sample);
@@ -33,7 +45,7 @@ public class SimilarityTests
         Assert.Equal(0.756983145f, ppm[0], 1e-6f);
         Assert.Equal(0.259379433f, ppm[1], 1e-6f);
         Assert.Throws<SimilarityArgumentException>(() =>
-            SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions(MzToleranceDa: 0)));
+            SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions(MzToleranceDa: 0, MzTolerancePpm: 0)));
         Assert.Throws<SimilarityPositionException>(() =>
             SpectrumSimilarity.PairScores(ds, new long[] { 9 }, ds, new long[] { 0 }));
     }

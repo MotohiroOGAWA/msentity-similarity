@@ -20,7 +20,7 @@ public enum SimilarityMethod
 public sealed record SimilarityOptions(
     SimilarityMethod Method = SimilarityMethod.Cosine,
     double MzToleranceDa = 0.01,
-    double MzTolerancePpm = 0.0,
+    double MzTolerancePpm = 10.0,
     double IntensityExponent = 1.0,
     int Threads = 0)
 {
@@ -32,6 +32,24 @@ public sealed record SimilarityOptions(
         MzTolerancePpm = MzTolerancePpm,
         IntensityExponent = IntensityExponent,
     };
+
+    /// <summary>
+    /// A copy with both tolerances from text such as "0.01Da,10ppm" or "10ppm": &lt;value&gt;Da and/or
+    /// &lt;value&gt;ppm in either order, units case-insensitive; a unit left out becomes 0.
+    /// </summary>
+    public SimilarityOptions WithMzTolerance(string text)
+    {
+        var native = ToNative();
+        Check(mssim_parse_mz_tolerance(text, ref native));
+        return this with { MzToleranceDa = native.MzToleranceDa, MzTolerancePpm = native.MzTolerancePpm };
+    }
+
+    /// <summary>Both tolerances as canonical text, e.g. "0.01Da,10ppm" (a zero term is left out).</summary>
+    public string FormatMzTolerance()
+    {
+        Check(mssim_format_mz_tolerance(ToNative(), out IntPtr text));
+        return TakeString(text);
+    }
 }
 
 /// <summary>

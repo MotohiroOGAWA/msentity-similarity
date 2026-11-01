@@ -19,7 +19,8 @@ reproduced by another implementation.
 
    holds for at least one rule. A tolerance of 0 turns its rule off; at least
    one must be positive. The defaults are `mz_tolerance_da = 0.01` and
-   `mz_tolerance_ppm = 0` (Da only). Both bounds are inclusive. The ppm rule
+   `mz_tolerance_ppm = 10` (0.01 Da or 10 ppm; the ppm rule is the wider one
+   above m/z 1000). Both bounds are inclusive. The ppm rule
    divides by the mean of the two m/z values, so it gives the same result
    whichever spectrum comes first.
 3. **Each peak pairs at most once.** Of all the pairs that can pair, the one
@@ -49,6 +50,13 @@ Examples of the two rules for 1000 vs 1000.008 (0.008 Da, 8.0 ppm) and 100 vs
 
 Combining both rules allows, for example, a fixed tolerance at low m/z and a
 relative one at high m/z.
+
+The two tolerances can also be written as one text, as `mssim-tool
+--mz-tolerance` takes them: `<value>Da` and/or `<value>ppm` joined by a comma
+in either order, units case-insensitive and spaces allowed (`0.01Da,10ppm`,
+`10 PPM, 0.01da`, `10ppm`). A unit left out is 0. `parse_mz_tolerance` reads
+this text and `format_mz_tolerance` writes its canonical form (`0.01Da,10ppm`;
+a zero term is left out), in C++, the C API, and every binding.
 
 For the two spectra of [examples/example.msp](examples/example.msp), with the defaults:
 

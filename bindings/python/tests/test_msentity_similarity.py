@@ -49,6 +49,18 @@ class TestCalculation(unittest.TestCase):
         np.testing.assert_allclose(mss.all_pairs(self.ds[[0]], self.ds.to_bytes())[0], ROW0,
                                    atol=1e-6)
 
+    def test_mz_tolerance_text(self) -> None:
+        self.assertEqual(mss.parse_mz_tolerance("0.01da,10PPM"),
+                         {"mz_tolerance_da": 0.01, "mz_tolerance_ppm": 10.0})
+        self.assertEqual(mss.parse_mz_tolerance("10ppm"), {"mz_tolerance_da": 0.0, "mz_tolerance_ppm": 10.0})
+        self.assertEqual(mss.format_mz_tolerance(0.01, 10), "0.01Da,10ppm")
+        self.assertEqual(mss.format_mz_tolerance(0, 10), "10ppm")
+        with self.assertRaises(mss.InvalidArgumentError):
+            mss.parse_mz_tolerance("0.01")
+        np.testing.assert_allclose(
+            mss.pair_scores(self.ds, [0, 2], self.ds, [1, 4], **mss.parse_mz_tolerance("20ppm")),
+            [0.756983145, 0.259379433], atol=1e-6)
+
     def test_errors(self) -> None:
         with self.assertRaises(mss.InvalidArgumentError):
             mss.all_pairs(self.ds, self.ds, method="dot")

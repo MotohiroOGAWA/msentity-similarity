@@ -24,7 +24,7 @@ namespace sim = msentity::similarity;
 sim::Options options;                       // defaults:
 options.method = sim::Method::Cosine;       //   Cosine or ReverseCosine
 options.mz_tolerance_da = 0.01;             //   m/z tolerance in Da, >= 0 (0 = off)
-options.mz_tolerance_ppm = 0.0;             //   m/z tolerance in ppm, >= 0 (0 = off);
+options.mz_tolerance_ppm = 10.0;            //   m/z tolerance in ppm, >= 0 (0 = off);
                                             //   peaks match within either, see similarity.md
 options.intensity_exponent = 1.0;           //   intensity^exponent before scoring, > 0
 options.threads = 0;                        //   0 = all hardware threads
@@ -33,6 +33,16 @@ options.threads = 0;                        //   0 = all hardware threads
 `sim::parse_method("reverse_cosine")` and `sim::method_name(Method::Cosine)`
 (`"cosine"`) convert to and from the names used in files and bindings. The
 scores themselves are defined in [similarity.md](similarity.md).
+
+The tolerances can be given as text:
+
+```cpp
+sim::MzTolerance t = sim::parse_mz_tolerance("10 PPM, 0.01da");   // t.da = 0.01, t.ppm = 10
+options.mz_tolerance_da = t.da;
+options.mz_tolerance_ppm = t.ppm;
+sim::format_mz_tolerance(0.01, 10);   // "0.01Da,10ppm"
+sim::format_mz_tolerance(0, 10);      // "10ppm"
+```
 
 ## 2. Plain scores
 
@@ -196,5 +206,6 @@ $ mssim-tool export hits.mssim hits.tsv
 ```
 
 Options for `search` and `by-key`: `--method cosine|reverse_cosine`,
-`--mz-tolerance-da D`, `--mz-tolerance-ppm P`, `--exponent E`, `--threads N`; `search` embeds the spectra
+`--mz-tolerance T` (`0.01Da,10ppm` by default, or e.g. `10ppm`, `0.01Da`), `--exponent E`,
+`--threads N`; `search` embeds the spectra
 unless `--lightweight` is given, `by-key` only with `--embed`.

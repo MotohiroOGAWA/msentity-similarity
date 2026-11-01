@@ -165,6 +165,23 @@ void mssim_default_options(mssim_options* options) {
   options->intensity_exponent = defaults.intensity_exponent;
 }
 
+int32_t mssim_parse_mz_tolerance(const char* text, mssim_options* options) {
+  return guarded([&] {
+    require(text != nullptr && options != nullptr, "text or options is NULL");
+    auto tolerance = msentity::similarity::parse_mz_tolerance(text);
+    options->mz_tolerance_da = tolerance.da;
+    options->mz_tolerance_ppm = tolerance.ppm;
+  });
+}
+
+int32_t mssim_format_mz_tolerance(const mssim_options* options, char** out) {
+  return guarded([&] {
+    require(options != nullptr && out != nullptr, "options or output is NULL");
+    *out = duplicate(
+        msentity::similarity::format_mz_tolerance(options->mz_tolerance_da, options->mz_tolerance_ppm));
+  });
+}
+
 // ---- calculations -----------------------------------------------------------------
 int32_t mssim_pair_scores(const uint8_t* ds1, int64_t ds1_size, const int64_t* index1,
                           const uint8_t* ds2, int64_t ds2_size, const int64_t* index2, int64_t n,

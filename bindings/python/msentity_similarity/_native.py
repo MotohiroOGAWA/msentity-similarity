@@ -91,6 +91,8 @@ _declare("mssim_string_free", None, ctypes.c_void_p)
 _declare("mssim_bytes_free", None, ctypes.c_void_p)
 _declare("mssim_values_clear", None, ValuePtr, i64)
 _declare("mssim_default_options", None, OptionsPtr)
+_declare("mssim_parse_mz_tolerance", i32, cstr, OptionsPtr)
+_declare("mssim_format_mz_tolerance", i32, OptionsPtr, StrOut)
 
 _declare("mssim_pair_scores", i32, Bytes, i64, ctypes.POINTER(i64), Bytes, i64, ctypes.POINTER(i64),
          i64, OptionsPtr, ctypes.POINTER(ctypes.c_float))

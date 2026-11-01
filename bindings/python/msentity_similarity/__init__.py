@@ -36,6 +36,8 @@ __all__ = [
     "library_search",
     "similarity_by_key",
     "load",
+    "parse_mz_tolerance",
+    "format_mz_tolerance",
     "MsEntityError",
     "InvalidArgumentError",
     "PositionError",
@@ -87,6 +89,26 @@ def _options(method: str, mz_tolerance_da: float, mz_tolerance_ppm: float,
                       float(mz_tolerance_ppm), float(intensity_exponent))
 
 
+def parse_mz_tolerance(text: str) -> dict[str, float]:
+    """``"0.01Da,10ppm"`` → ``{"mz_tolerance_da": 0.01, "mz_tolerance_ppm": 10.0}``.
+
+    Terms are ``<value>Da`` and/or ``<value>ppm`` in either order (units are
+    case-insensitive); a unit left out is 0. Pass the result on as
+    ``mss.library_search(q, ref, **mss.parse_mz_tolerance("10ppm"))``.
+    """
+    options = _n.Options()
+    _check(_n.lib.mssim_parse_mz_tolerance(_encode(text), ctypes.byref(options)))
+    return {"mz_tolerance_da": options.mz_tolerance_da, "mz_tolerance_ppm": options.mz_tolerance_ppm}
+
+
+def format_mz_tolerance(mz_tolerance_da: float, mz_tolerance_ppm: float) -> str:
+    """Canonical text of the two tolerances, e.g. ``"0.01Da,10ppm"`` (a zero term is left out)."""
+    options = _n.Options(0, 0, float(mz_tolerance_da), float(mz_tolerance_ppm), 1.0)
+    out = ctypes.c_void_p()
+    _check(_n.lib.mssim_format_mz_tolerance(ctypes.byref(options), ctypes.byref(out)))
+    return _take_string(out)
+
+
 def _new_result(call) -> "SimilarityDataset":
     handle = ctypes.c_void_p()
     _check(call(ctypes.byref(handle)))
@@ -105,7 +127,7 @@ def _i64_ptr(array: np.ndarray):
 
 def pair_scores(ds1: "ms.Dataset", index1: Sequence[int], ds2: "ms.Dataset",
                 index2: Sequence[int], *, method: str = "cosine",
-                mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 0.0,
+                mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 10.0,
                 intensity_exponent: float = 1.0, threads: int = 0) -> np.ndarray:
     """Scores of ds1[index1[k]] vs ds2[index2[k]] as a float32 array."""
     a, b = _dataset_bytes(ds1), _dataset_bytes(ds2)
@@ -122,7 +144,7 @@ def pair_scores(ds1: "ms.Dataset", index1: Sequence[int], ds2: "ms.Dataset",
 
 
 def all_pairs(ds1: "ms.Dataset", ds2: "ms.Dataset", *, method: str = "cosine",
-              mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 0.0,
+              mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 10.0,
               intensity_exponent: float = 1.0, threads: int = 0) -> np.ndarray:
     """len(ds1) × len(ds2) float32 score matrix."""
     a, b = _dataset_bytes(ds1), _dataset_bytes(ds2)
@@ -138,7 +160,7 @@ def all_pairs(ds1: "ms.Dataset", ds2: "ms.Dataset", *, method: str = "cosine",
 
 def library_search(query: "ms.Dataset", reference: "ms.Dataset", threshold: float = 0.8, *,
                    method: str = "cosine", mz_tolerance_da: float = 0.01,
-                   mz_tolerance_ppm: float = 0.0, intensity_exponent: float = 1.0,
+                   mz_tolerance_ppm: float = 10.0, intensity_exponent: float = 1.0,
                    threads: int = 0,
                    include_matched_data: bool = True, query_source: str | None = None,
                    reference_source: str | None = None,
@@ -161,7 +183,7 @@ def library_search(query: "ms.Dataset", reference: "ms.Dataset", threshold: floa
 
 def similarity_by_key(ds1: "ms.Dataset", ds2: "ms.Dataset", key1: str = "SpecID",
                       key2: str = "SpecID", *, method: str = "cosine",
-                      mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 0.0,
+                      mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 10.0,
                       intensity_exponent: float = 1.0, threads: int = 0,
                       include_matched_data: bool = False, source1: str | None = None,
                       source2: str | None = None) -> "SimilarityDataset":

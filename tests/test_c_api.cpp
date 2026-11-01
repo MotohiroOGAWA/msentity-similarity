@@ -42,7 +42,18 @@ TEST(CApi, AllPairsAndPairScores) {
   mssim_default_options(&options);
   EXPECT_EQ(options.method, MSSIM_METHOD_COSINE);
   EXPECT_DOUBLE_EQ(options.mz_tolerance_da, 0.01);
-  EXPECT_DOUBLE_EQ(options.mz_tolerance_ppm, 0.0);
+  EXPECT_DOUBLE_EQ(options.mz_tolerance_ppm, 10.0);
+  char* tolerance = nullptr;
+  ASSERT_EQ(mssim_format_mz_tolerance(&options, &tolerance), MSENTITY_OK);
+  EXPECT_STREQ(tolerance, "0.01Da,10ppm");
+  mssim_string_free(tolerance);
+  mssim_options parsed = options;
+  ASSERT_EQ(mssim_parse_mz_tolerance("20PPM", &parsed), MSENTITY_OK);
+  EXPECT_EQ(parsed.mz_tolerance_da, 0.0);
+  EXPECT_DOUBLE_EQ(parsed.mz_tolerance_ppm, 20.0);
+  EXPECT_EQ(mssim_parse_mz_tolerance("20", &parsed), MSENTITY_ERR_INVALID_ARGUMENT);
+  EXPECT_EQ(mssim_parse_mz_tolerance(nullptr, &parsed), MSENTITY_ERR_INVALID_ARGUMENT);
+  options.mz_tolerance_ppm = 0.0;  // the reference values below are for 0.01 Da only
 
   std::vector<float> matrix(25);
   ASSERT_EQ(mssim_all_pairs(bytes.data(), bytes.size(), bytes.data(), bytes.size(), &options,
