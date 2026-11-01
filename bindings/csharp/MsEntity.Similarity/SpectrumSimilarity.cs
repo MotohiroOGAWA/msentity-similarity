@@ -17,20 +17,18 @@ public enum SimilarityMethod
 /// <param name="MzTolerancePpm">Symmetric m/z tolerance in ppm; 0 disables it.</param>
 /// <param name="IntensityExponent">Intensities are raised to this power (&gt; 0) before scoring.</param>
 /// <param name="Threads">Worker threads; 0 = all hardware threads.</param>
-/// <param name="BinWidth">Former name of <paramref name="MzToleranceDa"/>; overrides it when set.</param>
 public sealed record SimilarityOptions(
     SimilarityMethod Method = SimilarityMethod.Cosine,
     double MzToleranceDa = 0.01,
     double MzTolerancePpm = 0.0,
     double IntensityExponent = 1.0,
-    int Threads = 0,
-    double? BinWidth = null)
+    int Threads = 0)
 {
     internal NativeOptions ToNative() => new()
     {
         Method = (int)Method,
         Threads = Threads,
-        MzToleranceDa = BinWidth ?? MzToleranceDa,
+        MzToleranceDa = MzToleranceDa,
         MzTolerancePpm = MzTolerancePpm,
         IntensityExponent = IntensityExponent,
     };

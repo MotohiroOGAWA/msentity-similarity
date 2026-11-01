@@ -118,13 +118,11 @@ With different key names (for example `ID` and `Key`) there are two, `ID` and
   "mode": "library_search",                // "library_search" or "by_key"
   "algorithm": "tolerance_cosine_similarity_library_search",
                                            // tolerance_<method>_similarity_<mode name>
-                                           // (files written before m/z tolerances: binned_…)
   "parameters": {
     "threshold": 0.7,                      // library search: minimum score kept
     "method": "cosine",                    // "cosine" or "reverse_cosine"
     "mz_tolerance_da": 0.01,               // peaks matched within this many Da (0 = off)
     "mz_tolerance_ppm": 0.0,               // ... or within this many ppm (0 = off)
-                                           // (older files: "bin_width" instead of both)
     "intensity_exponent": 1.0              // intensities were raised to this power
   },                                       // (by_key: "key1" and "key2" instead of "threshold")
   "matching": "all_pairs_at_or_above_threshold",

@@ -49,9 +49,6 @@ class SimilarityTest {
           SimilarityException.InvalidArgument.class,
           () -> Similarity.allPairs(ds, ds, Options.defaults().withMzToleranceDa(0)));
       assertThrows(
-          SimilarityException.InvalidArgument.class,
-          () -> Similarity.allPairs(ds, ds, Options.defaults().withBinWidth(0)));
-      assertThrows(
           SimilarityException.PositionOutOfRange.class,
           () -> Similarity.pairScores(ds, new long[] {9}, ds, new long[] {0}));
     }

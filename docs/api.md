@@ -196,6 +196,5 @@ $ mssim-tool export hits.mssim hits.tsv
 ```
 
 Options for `search` and `by-key`: `--method cosine|reverse_cosine`,
-`--mz-tolerance-da D`, `--mz-tolerance-ppm P` (`--bin-width` is the former name
-of `--mz-tolerance-da`), `--exponent E`, `--threads N`; `search` embeds the spectra
+`--mz-tolerance-da D`, `--mz-tolerance-ppm P`, `--exponent E`, `--threads N`; `search` embeds the spectra
 unless `--lightweight` is given, `by-key` only with `--embed`.

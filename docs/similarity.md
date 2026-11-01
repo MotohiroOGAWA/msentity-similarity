@@ -109,9 +109,6 @@ matched, so the score equals the cosine, 0.75971. Reverse cosine is therefore
 * `mz_tolerance_da` and `mz_tolerance_ppm` must be finite and ≥ 0 with at least
   one positive, and `intensity_exponent` must be positive; otherwise the call
   fails with an invalid-argument error.
-* Earlier versions used fixed bins `floor(mz / bin_width)`, so two peaks 0.002 apart could fall
-  into different bins. `bin_width` is still accepted by the bindings and
-  `mssim-tool` as the former name of `mz_tolerance_da`.
 * `intensity_exponent = 0.5` (square root) reduces the weight of dominant peaks.
   For the example spectra it raises the cosine from 0.75971 to 0.86077.
 

@@ -34,8 +34,6 @@ public class SimilarityTests
         Assert.Equal(0.259379433f, ppm[1], 1e-6f);
         Assert.Throws<SimilarityArgumentException>(() =>
             SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions(MzToleranceDa: 0)));
-        Assert.Throws<SimilarityArgumentException>(() =>
-            SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions(BinWidth: 0)));
         Assert.Throws<SimilarityPositionException>(() =>
             SpectrumSimilarity.PairScores(ds, new long[] { 9 }, ds, new long[] { 0 }));
     }

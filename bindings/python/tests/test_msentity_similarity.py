@@ -56,8 +56,6 @@ class TestCalculation(unittest.TestCase):
             mss.all_pairs(self.ds, self.ds, mz_tolerance_da=0, mz_tolerance_ppm=0)
         with self.assertRaises(mss.InvalidArgumentError):
             mss.all_pairs(self.ds, self.ds, mz_tolerance_ppm=-1)
-        with self.assertWarns(DeprecationWarning), self.assertRaises(mss.InvalidArgumentError):
-            mss.all_pairs(self.ds, self.ds, bin_width=0)  # former name of mz_tolerance_da
         with self.assertRaises(mss.PositionError):
             mss.pair_scores(self.ds, [9], self.ds, [0])
         with self.assertRaises(mss.FormatError):

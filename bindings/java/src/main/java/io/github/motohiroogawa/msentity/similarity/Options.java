@@ -30,28 +30,8 @@ public record Options(Method method, double mzToleranceDa, double mzTolerancePpm
     return new Options(Method.COSINE, 0.01, 0.0, 1.0, 0);
   }
 
-  /**
-   * Compatibility constructor: the former bin width is used as the Da tolerance.
-   *
-   * @deprecated use the constructor with {@code mzToleranceDa} and {@code mzTolerancePpm}
-   */
-  @Deprecated
-  public Options(Method method, double binWidth, double intensityExponent, int threads) {
-    this(method, binWidth, 0.0, intensityExponent, threads);
-  }
-
   public Options withMethod(Method value) {
     return new Options(value, mzToleranceDa, mzTolerancePpm, intensityExponent, threads);
-  }
-
-  /**
-   * Former name of {@link #withMzToleranceDa(double)}.
-   *
-   * @deprecated use {@link #withMzToleranceDa(double)}
-   */
-  @Deprecated
-  public Options withBinWidth(double value) {
-    return withMzToleranceDa(value);
   }
 
   public Options withMzToleranceDa(double value) {

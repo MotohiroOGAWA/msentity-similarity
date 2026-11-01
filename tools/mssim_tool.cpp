@@ -6,9 +6,8 @@
 //   mssim-tool export <input.mssim> <output.csv|.tsv|.parquet>
 //
 // search and by-key also take [--method cosine|reverse_cosine] [--mz-tolerance-da D]
-// [--mz-tolerance-ppm P] [--exponent E] [--threads N]; --bin-width W is the former
-// name of --mz-tolerance-da. Inputs are any format msentity reads
-// (.msp, .mgf, .msds, .tsv, .csv).
+// [--mz-tolerance-ppm P] [--exponent E] [--threads N]. Inputs are any format
+// msentity reads (.msp, .mgf, .msds, .tsv, .csv).
 
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -73,7 +72,7 @@ int main(int argc, char** argv) {
         threshold = std::stod(args[++i]);
       } else if (args[i] == "--method" && has_value) {
         options.method = sim::parse_method(args[++i]);
-      } else if ((args[i] == "--mz-tolerance-da" || args[i] == "--bin-width") && has_value) {
+      } else if (args[i] == "--mz-tolerance-da" && has_value) {
         options.mz_tolerance_da = std::stod(args[++i]);
       } else if (args[i] == "--mz-tolerance-ppm" && has_value) {
         options.mz_tolerance_ppm = std::stod(args[++i]);
