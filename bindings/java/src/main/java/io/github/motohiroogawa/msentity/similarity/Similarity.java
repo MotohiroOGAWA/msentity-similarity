@@ -22,7 +22,7 @@ import java.lang.invoke.MethodType;
  * try (Dataset query = Dataset.load(Path.of("query.msp"));
  *     Dataset library = Dataset.load(Path.of("library.msp"));
  *     SimilarityDataset hits = Similarity.librarySearch(query, library, 0.8)) {
- *   hits.column("cosine_similarity");
+ *   hits.column("similarity");
  *   hits.save(Path.of("hits.mssim"));
  * }
  * }</pre>

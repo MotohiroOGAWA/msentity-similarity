@@ -69,7 +69,7 @@ class TestCalculation(unittest.TestCase):
                                     progress=lambda done, total: calls.append((done, total)))
         self.assertEqual(len(result), 9)
         self.assertEqual(calls[-1], (25, 25))
-        self.assertEqual(result.columns, ["index1", "index2", "cosine_similarity",
+        self.assertEqual(result.columns, ["index1", "index2", "similarity",
                                           "data_index1", "data_index2"])
         self.assertEqual(result["index2"], [0, 1, 4, 2, 3, 2, 3, 1, 4])
         metadata = result.metadata
@@ -90,7 +90,7 @@ class TestCalculation(unittest.TestCase):
         reordered = self.ds[[4, 3, 2]]
         result = mss.similarity_by_key(self.ds, reordered, method="reverse_cosine")
         # The score column keeps its name for every method.
-        self.assertEqual(result.columns, ["SpecID", "index1", "index2", "cosine_similarity"])
+        self.assertEqual(result.columns, ["SpecID", "index1", "index2", "similarity"])
         self.assertEqual(result.metadata["parameters"]["method"], "reverse_cosine")
         self.assertEqual(result["index1"], [2, 3, 4])
         self.assertEqual(result["index2"], [2, 1, 0])
@@ -114,7 +114,7 @@ class TestSimilarityDataset(unittest.TestCase):
         result = mss.library_search(ds, ds, 0.9)
         filtered = result.filter([i == 1 for i in result["index1"]])
         self.assertEqual(filtered.metadata["source_row_count"], 9)
-        ranked = filtered.sort_by("cosine_similarity", ascending=False)
+        ranked = filtered.sort_by("similarity", ascending=False)
         self.assertEqual(ranked["index2"], [1, 4])
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "hits.mssim"
@@ -125,7 +125,7 @@ class TestSimilarityDataset(unittest.TestCase):
             self.assertEqual(list(loaded.source_indices(2)), [1, 4])
             loaded.export(Path(tmp) / "hits.tsv")
             text = (Path(tmp) / "hits.tsv").read_text()
-            self.assertTrue(text.startswith("index1\tindex2\tcosine_similarity"))
+            self.assertTrue(text.startswith("index1\tindex2\tsimilarity"))
             with self.assertRaises(mss.InvalidArgumentError):
                 loaded.save(Path(tmp) / "hits.txt")
             with self.assertRaises(mss.FileError):
@@ -153,7 +153,7 @@ class TestSimilarityDataset(unittest.TestCase):
         ds = ms.load(SAMPLE)
         table = mss.library_search(ds, ds, 0.9).to_arrow()
         self.assertEqual(table.num_rows, 9)
-        self.assertEqual(str(table.schema.field("cosine_similarity").type), "float")
+        self.assertEqual(str(table.schema.field("similarity").type), "float")
 
 
 if __name__ == "__main__":

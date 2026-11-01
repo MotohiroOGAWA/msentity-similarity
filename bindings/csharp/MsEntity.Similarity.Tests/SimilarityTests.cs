@@ -47,7 +47,7 @@ public class SimilarityTests
             progress: (done, total) => { lastDone = done; lastTotal = total; });
         Assert.Equal((25L, 25L), (lastDone, lastTotal));
         Assert.Equal(9, result.Count);
-        Assert.Equal(new[] { "index1", "index2", "cosine_similarity", "data_index1", "data_index2" },
+        Assert.Equal(new[] { "index1", "index2", "similarity", "data_index1", "data_index2" },
             result.Columns);
         Assert.Equal(new object?[] { 0L, 1L, 4L, 2L, 3L, 2L, 3L, 1L, 4L }, result["index2"]);
         Assert.Contains("\"mode\":\"library_search\"", result.MetadataJson);
@@ -70,7 +70,7 @@ public class SimilarityTests
         ds.SetSpecId("SpecID", "SP");
         using var reordered = ds.Select(4, 3, 2);
         using var result = SpectrumSimilarity.SimilarityByKey(ds, reordered);
-        Assert.Equal(new[] { "SpecID", "index1", "index2", "cosine_similarity" }, result.Columns);
+        Assert.Equal(new[] { "SpecID", "index1", "index2", "similarity" }, result.Columns);
         Assert.Equal(new object?[] { 2L, 3L, 4L }, result["index1"]);
         Assert.Equal(new object?[] { 2L, 1L, 0L }, result["index2"]);
         Assert.False(result.HasMatchedData);
@@ -89,7 +89,7 @@ public class SimilarityTests
             using var result = SpectrumSimilarity.LibrarySearch(ds, ds, 0.9);
             var mask = result["index1"].Select(v => (long)v! == 1).ToArray();
             using var filtered = result.Filter(mask);
-            using var ranked = filtered.SortBy("cosine_similarity", ascending: false);
+            using var ranked = filtered.SortBy("similarity", ascending: false);
             Assert.Equal(new object?[] { 1L, 4L }, ranked["index2"]);
             string path = Path.Combine(tmp, "hits.mssim");
             ranked.Save(path);
@@ -97,7 +97,7 @@ public class SimilarityTests
             Assert.Equal(2, loaded.Count);
             Assert.Equal(new long[] { 1, 4 }, loaded.SourceIndices(2));
             loaded.ExportTable(Path.Combine(tmp, "hits.tsv"));
-            Assert.StartsWith("index1\tindex2\tcosine_similarity", File.ReadAllText(Path.Combine(tmp, "hits.tsv")));
+            Assert.StartsWith("index1\tindex2\tsimilarity", File.ReadAllText(Path.Combine(tmp, "hits.tsv")));
             Assert.Throws<SimilarityFileException>(() => SimilarityDataset.Load(Path.Combine(tmp, "missing.mssim")));
         }
         finally

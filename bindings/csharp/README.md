@@ -5,7 +5,7 @@
 ```csharp
 using var ds = Dataset.Load("example.msp");
 using var hits = SpectrumSimilarity.LibrarySearch(ds, ds, threshold: 0.7);
-hits["cosine_similarity"];   // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
+hits["similarity"];   // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
 hits.Save("hits.mssim");
 ```
 

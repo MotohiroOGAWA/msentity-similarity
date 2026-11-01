@@ -222,7 +222,7 @@ TEST(ByKey, PairsEqualKeysInFirstDatasetOrder) {
   ds2.set_column("Key", std::vector<Value>{std::string("d"), std::string("a"), std::string("x")});
   auto table = similarity_by_key(ds1, ds2, "ID", "Key");
   EXPECT_EQ(internal::column_names(*table),
-            (std::vector<std::string>{"ID", "Key", "index1", "index2", "cosine_similarity"}));
+            (std::vector<std::string>{"ID", "Key", "index1", "index2", "similarity"}));
   EXPECT_EQ(table->num_rows(), 2);
   auto ids = internal::to_values(*table->column(0));
   EXPECT_EQ(std::get<std::string>(ids[0]), "a");
@@ -235,7 +235,7 @@ TEST(ByKey, PairsEqualKeysInFirstDatasetOrder) {
   ds2.set_column("N", std::vector<Value>{4.0, 1.0, 7.0});
   auto numeric = similarity_by_key(ds1, ds2, "N", "N");
   EXPECT_EQ(internal::column_names(*numeric),
-            (std::vector<std::string>{"N", "index1", "index2", "cosine_similarity"}));
+            (std::vector<std::string>{"N", "index1", "index2", "similarity"}));
   EXPECT_EQ(numeric->num_rows(), 2);
 }
 

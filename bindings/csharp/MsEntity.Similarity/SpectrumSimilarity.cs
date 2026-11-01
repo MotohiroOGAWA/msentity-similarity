@@ -42,7 +42,7 @@ public sealed record SimilarityOptions(
 /// using var query = Dataset.Load("query.msp");
 /// using var library = Dataset.Load("library.msp");
 /// using var hits = SpectrumSimilarity.LibrarySearch(query, library, threshold: 0.8);
-/// hits["cosine_similarity"];
+/// hits["similarity"];
 /// hits.Save("hits.mssim");
 /// </code>
 /// </example>

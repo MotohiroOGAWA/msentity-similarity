@@ -6,7 +6,7 @@ Java binding of msentity-similarity, using the Foreign Function & Memory API
 ```java
 try (Dataset ds = Dataset.load(Path.of("example.msp"));
      SimilarityDataset hits = Similarity.librarySearch(ds, ds, 0.7)) {
-  hits.column("cosine_similarity");   // [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
+  hits.column("similarity");   // [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
   hits.save(Path.of("hits.mssim"));
 }
 ```

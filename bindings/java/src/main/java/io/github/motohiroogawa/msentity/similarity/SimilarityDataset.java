@@ -21,7 +21,7 @@ import java.util.List;
  * A similarity result (one row per spectrum pair), as stored in .mssim files.
  *
  * <p>Columns: key columns (by-key results), {@code index1}, {@code index2} (positions in the input
- * datasets), {@code cosine_similarity} (the score of any method), and {@code data_index1} / {@code
+ * datasets), {@code similarity} (the score of any method), and {@code data_index1} / {@code
  * data_index2} when the compared spectra are embedded. Cell values are {@code null}, {@link
  * Boolean}, {@link Long}, {@link Double}, or {@link String}.
  *

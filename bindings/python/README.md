@@ -8,7 +8,7 @@ import msentity_similarity as mss
 
 ds = ms.load("example.msp")
 hits = mss.library_search(ds, ds, threshold=0.7)
-hits["cosine_similarity"]   # [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
+hits["similarity"]   # [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
 hits.save("hits.mssim")
 ```
 

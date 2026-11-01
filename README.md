@@ -113,11 +113,11 @@ import msentity_similarity as mss
 ds = ms.load("example.msp")                       # 2 spectra
 hits = mss.library_search(ds, ds, threshold=0.7)
 hits.to_pandas()
-#    index1  index2  cosine_similarity  data_index1  data_index2
-# 0       0       0           1.000000            0            0
-# 1       0       1           0.759714            0            1
-# 2       1       0           0.759714            1            0
-# 3       1       1           1.000000            1            1
+#    index1  index2  similarity  data_index1  data_index2
+# 0       0       0    1.000000            0            0
+# 1       0       1    0.759714            0            1
+# 2       1       0    0.759714            1            0
+# 3       1       1    1.000000            1            1
 query, reference = hits.match_records(1)          # the two compared spectra
 hits.save("hits.mssim")
 ```

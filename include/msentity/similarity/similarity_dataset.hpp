@@ -13,7 +13,7 @@
 
 namespace msentity::similarity {
 
-// Summary of the cosine_similarity column (NaN when there are no rows).
+// Summary of the similarity column (NaN when there are no rows).
 struct ScoreSummary {
   int64_t count = 0;
   double mean = 0, q1 = 0, median = 0, q3 = 0, min = 0, max = 0;
@@ -30,7 +30,7 @@ struct Histogram {
 // the content of an .mssim file (docs/format/mssim.md).
 //
 // Invariants (checked by every constructor):
-//   * the table has index1, index2, and a numeric cosine_similarity column
+//   * the table has index1, index2, and a numeric similarity column
 //     whose values are finite and within [0, 1];
 //   * metadata_json is a JSON object;
 //   * with matched data: data_index1/data_index2 columns refer to rows of the

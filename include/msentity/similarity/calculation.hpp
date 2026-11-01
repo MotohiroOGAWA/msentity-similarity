@@ -58,7 +58,7 @@ std::vector<float> all_pairs_matrix(const MSDataset& ds1, const MSDataset& ds2,
 // Pair spectra whose metadata keys are equal (ds1[key1] == ds2[key2]) and
 // score them. Missing keys are skipped; a key value that occurs twice in one
 // dataset is an error. Columns: key1 [, key2 if different], index1, index2,
-// cosine_similarity (float32); rows in ds1 order.
+// similarity (float32); rows in ds1 order.
 std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDataset& ds2,
                                                 const std::string& key1 = "SpecID",
                                                 const std::string& key2 = "SpecID",
@@ -66,7 +66,7 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
 
 // Score every query spectrum against every reference spectrum and keep the
 // pairs with score >= threshold. Columns: index1 (query), index2
-// (reference), cosine_similarity (float32); rows ordered by index1, index2.
+// (reference), similarity (float32); rows ordered by index1, index2.
 std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDataset& reference,
                                              double threshold = 0.8,
                                              const Options& options = {},

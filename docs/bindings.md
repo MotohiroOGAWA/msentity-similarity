@@ -39,8 +39,8 @@ hits = mss.library_search(ds, ds, 0.7,
                           query_source="example.msp",          # recorded in the metadata
                           progress=lambda done, total: None)    # optional
 len(hits)                       # 4
-hits.columns                    # ['index1', 'index2', 'cosine_similarity', 'data_index1', 'data_index2']
-hits["cosine_similarity"]       # [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
+hits.columns                    # ['index1', 'index2', 'similarity', 'data_index1', 'data_index2']
+hits["similarity"]       # [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
 hits.metadata["parameters"]     # {'threshold': 0.7, 'method': 'cosine', 'mz_tolerance_da': 0.01,
                                 #  'mz_tolerance_ppm': 0.0, 'intensity_exponent': 1.0}
 query, ref = hits.match_records(1)   # msentity.Record of each side
@@ -49,7 +49,7 @@ ref.mz                               # array([ 91.0542, 125.0233, 246.1125])
 
 # Filter, sort, statistics
 different = hits.filter([a != b for a, b in zip(hits["index1"], hits["index2"])])
-best = different.sort_by("cosine_similarity", ascending=False)
+best = different.sort_by("similarity", ascending=False)
 hits.describe_scores()          # {'count': 4, 'mean': 0.879857…, 'q1': 0.759714…,
                                 #  'median': 0.879857…, 'q3': 1.0, 'min': 0.759714…, 'max': 1.0}
 hits.histogram(5)               # (array([0, 0, 0, 2, 2]), array([0. , 0.2, 0.4, 0.6, 0.8, 1. ]))
@@ -66,9 +66,9 @@ hits.export("hits.csv")         # table only: .csv, .tsv, .parquet
 ds.set_spec_id("SpecID", "SP")
 pairs = mss.similarity_by_key(ds, ds[[1, 0]], "SpecID", "SpecID")
 pairs.to_pandas()
-#   SpecID  index1  index2  cosine_similarity
-# 0    SP1       0       1                1.0
-# 1    SP2       1       0                1.0
+#   SpecID  index1  index2  similarity
+# 0    SP1       0       1         1.0
+# 1    SP2       1       0         1.0
 ```
 
 Errors are msentity's exception classes (`mss.InvalidArgumentError` is
@@ -99,8 +99,8 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
            "example.msp", "example.msp",    // sources for the metadata
            (done, total) -> {})) {          // progress, may be null
     hits.size();                            // 4
-    hits.columns();      // [index1, index2, cosine_similarity, data_index1, data_index2]
-    hits.column("cosine_similarity");       // [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
+    hits.columns();      // [index1, index2, similarity, data_index1, data_index2]
+    hits.column("similarity");       // [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
     hits.metadataJson();                    // {"created_at":"…","mode":"library_search",…}
 
     try (SimilarityDataset.Match m = hits.matchRecords(1)) {   // one-spectrum Datasets
@@ -108,7 +108,7 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
       m.second().value(0, "Name");          // MassSpecID0000002
     }
 
-    try (SimilarityDataset best = hits.sortBy("cosine_similarity", false)) {
+    try (SimilarityDataset best = hits.sortBy("similarity", false)) {
       best.save(Path.of("best.mssim"));
     }
     hits.describeScores();   // ScoreSummary[count=4, mean=0.8798…, q1=0.7597…, median=0.8798…, …]
@@ -119,7 +119,7 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
   ds.setSpecId("SpecID", "SP", false, 1);
   try (Dataset other = ds.select(1, 0);
        SimilarityDataset pairs = Similarity.similarityByKey(ds, other)) {  // key "SpecID"
-    pairs.columns();         // [SpecID, index1, index2, cosine_similarity]
+    pairs.columns();         // [SpecID, index1, index2, similarity]
   }
 }
 SimilarityDataset loaded = SimilarityDataset.load(Path.of("best.mssim"));
@@ -152,15 +152,15 @@ SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions(MzTolerancePpm: 10));
 using var hits = SpectrumSimilarity.LibrarySearch(ds, ds, threshold: 0.7,
     querySource: "example.msp", progress: (done, total) => { });
 hits.Count;                          // 4
-hits.Columns;                        // index1, index2, cosine_similarity, data_index1, data_index2
-hits["cosine_similarity"];           // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
+hits.Columns;                        // index1, index2, similarity, data_index1, data_index2
+hits["similarity"];           // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
 hits.MetadataJson;                   // {"created_at":"…","mode":"library_search",…}
 
 var (query, reference) = hits.MatchRecords(1);    // one-spectrum Datasets (dispose them)
 query.GetValue(0, "Name");           // MassSpecID0000001
 reference.GetValue(0, "Name");       // MassSpecID0000002
 
-using var best = hits.SortBy("cosine_similarity", ascending: false);
+using var best = hits.SortBy("similarity", ascending: false);
 best.Save("best.mssim");
 hits.DescribeScores();               // ScoreSummary { Count = 4, Mean = 0.8798…, … }
 hits.Histogram(5).Counts;            // { 0, 0, 0, 2, 2 }
@@ -169,7 +169,7 @@ hits.ExportTable("hits.csv");
 ds.SetSpecId("SpecID", "SP");
 using var other = ds.Select(1, 0);
 using var pairs = SpectrumSimilarity.SimilarityByKey(ds, other);   // key "SpecID"
-pairs.Columns;                       // SpecID, index1, index2, cosine_similarity
+pairs.Columns;                       // SpecID, index1, index2, similarity
 
 using var loaded = SimilarityDataset.Load("best.mssim");
 loaded.SourceIndices(1);             // { 0, 1 }
@@ -214,7 +214,7 @@ if (mssim_library_search(bytes, size, bytes, size, 0.7, &options,
 }
 mssim_size(hits);                                /* 4 */
 msentity_value scores[4];
-mssim_get_column(hits, "cosine_similarity", scores, 4);   /* scores[1].float_value = 0.7597… */
+mssim_get_column(hits, "similarity", scores, 4);   /* scores[1].float_value = 0.7597… */
 mssim_values_clear(scores, 4);
 mssim_save(hits, "hits.mssim");
 

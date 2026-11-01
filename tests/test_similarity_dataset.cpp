@@ -25,7 +25,7 @@ std::shared_ptr<arrow::Table> scores_table(const std::vector<int64_t>& index1,
   internal::check(b3.AppendValues(scores));
   return arrow::Table::Make(arrow::schema({arrow::field("index1", arrow::int64()),
                                            arrow::field("index2", arrow::int64()),
-                                           arrow::field("cosine_similarity", arrow::float64())}),
+                                           arrow::field("similarity", arrow::float64())}),
                             {internal::unwrap(b1.Finish()), internal::unwrap(b2.Finish()),
                              internal::unwrap(b3.Finish())},
                             static_cast<int64_t>(scores.size()));
@@ -51,7 +51,7 @@ TEST(SimilarityDataset, Validation) {
   EXPECT_THROW(SimilarityDataset(scores_table({0}, {0}, {std::nan("")})), std::invalid_argument);
   EXPECT_THROW(SimilarityDataset(scores_table({0}, {0}, {0.5}), "[1]"), std::invalid_argument);
   auto table = scores_table({0}, {0}, {0.5});
-  EXPECT_THROW(SimilarityDataset(internal::select_columns(*table, {"index1", "cosine_similarity"})),
+  EXPECT_THROW(SimilarityDataset(internal::select_columns(*table, {"index1", "similarity"})),
                std::invalid_argument);
   MSDataset one(nullptr, PeakSeries::from_spectra({{{1, 1}}}));
   // Matched data without data_index columns.
@@ -108,7 +108,7 @@ TEST(SimilarityDataset, LightweightRoundTripAndErrors) {
 
 TEST(SimilarityDataset, SortDescribeHistogram) {
   SimilarityDataset result(scores_table({0, 1, 2, 3}, {3, 2, 1, 0}, {0.2, 1.0, 0.6, 0.6}));
-  auto sorted = result.sort_by({"cosine_similarity", "index1"}, {false, true});
+  auto sorted = result.sort_by({"similarity", "index1"}, {false, true});
   std::vector<int64_t> order;
   for (const auto& v : sorted.column_values("index1")) order.push_back(std::get<int64_t>(v));
   EXPECT_EQ(order, (std::vector<int64_t>{1, 2, 3, 0}));
@@ -133,9 +133,9 @@ TEST(SimilarityDataset, ExportTable) {
   TempDir tmp;
   SimilarityDataset result(scores_table({0, 1}, {1, 0}, {0.25, 1.0}));
   result.export_table(tmp.file("t.csv"));
-  EXPECT_EQ(read_text(tmp.file("t.csv")), "index1,index2,cosine_similarity\n0,1,0.25\n1,0,1.0\n");
+  EXPECT_EQ(read_text(tmp.file("t.csv")), "index1,index2,similarity\n0,1,0.25\n1,0,1.0\n");
   result.export_table(tmp.file("t.tsv"));
-  EXPECT_EQ(read_text(tmp.file("t.tsv")), "index1\tindex2\tcosine_similarity\n0\t1\t0.25\n1\t0\t1.0\n");
+  EXPECT_EQ(read_text(tmp.file("t.tsv")), "index1\tindex2\tsimilarity\n0\t1\t0.25\n1\t0\t1.0\n");
   result.export_table(tmp.file("t.parquet"));
   EXPECT_GT(read_text(tmp.file("t.parquet")).size(), 4u);
   EXPECT_THROW(result.export_table(tmp.file("t.xlsx")), std::invalid_argument);

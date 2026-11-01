@@ -68,28 +68,28 @@ sim::SimilarityDataset hits = sim::calculate_library_search(
     [](int64_t done, int64_t total) {});  // optional progress callback
 
 hits.size();      // 4
-hits.columns();   // {"index1", "index2", "cosine_similarity", "data_index1", "data_index2"}
+hits.columns();   // {"index1", "index2", "similarity", "data_index1", "data_index2"}
 ```
 
 The result table:
 
 ```text
- index1  index2  cosine_similarity  data_index1  data_index2
-      0       0  1.0                          0            0
-      0       1  0.759714                     0            1
-      1       0  0.759714                     1            0
-      1       1  1.0                          1            1
+ index1  index2  similarity  data_index1  data_index2
+      0       0  1.0                   0            0
+      0       1  0.759714              0            1
+      1       0  0.759714              1            0
+      1       1  1.0                   1            1
 ```
 
 * `index1` / `index2` — positions in the query / reference dataset.
-* `cosine_similarity` — the score (this name is used for every method).
+* `similarity` — the score of every method; the method is `parameters.method` in the metadata.
 * `data_index1` / `data_index2` — rows of the embedded spectra (only with
   `include_matched_data`).
 
 Reading values and the compared spectra:
 
 ```cpp
-std::vector<Value> score = hits.column_values("cosine_similarity");
+std::vector<Value> score = hits.column_values("similarity");
 std::get<double>(score[1]);              // 0.759714
 
 auto [query, reference] = hits.match_records(1);   // two one-spectrum MSDatasets
@@ -112,7 +112,7 @@ for (std::size_t r = 0; r < i1.size(); ++r) mask.push_back(i1[r] != i2[r]);
 
 sim::SimilarityDataset different =
     hits.filter(mask)                                  // 2 rows; metadata row_count = 2,
-        .sort_by({"cosine_similarity"}, {false});      //   source_row_count = 4
+        .sort_by({"similarity"}, {false});      //   source_row_count = 4
                                                        // stable; missing values last
 
 sim::ScoreSummary s = hits.describe_scores();
@@ -138,7 +138,7 @@ hits.export_table("hits.csv");          // table only: .csv, .tsv, or .parquet
 `hits.csv`:
 
 ```text
-index1,index2,cosine_similarity,data_index1,data_index2
+index1,index2,similarity,data_index1,data_index2
 0,0,1.0,0,0
 0,1,0.7597143650054932,0,1
 1,0,0.7597143650054932,1,0
@@ -163,8 +163,8 @@ sim::SimilarityDataset by_key = sim::calculate_similarity(
     false,                 // include_matched_data (default false)
     "a.msds", "b.msds");   // sources for the metadata
 
-by_key.columns();          // {"SpecID", "index1", "index2", "cosine_similarity"}
-// SpecID index1 index2 cosine_similarity
+by_key.columns();          // {"SpecID", "index1", "index2", "similarity"}
+// SpecID index1 index2 similarity
 // SP1         0      1  1.0
 // SP2         1      0  1.0
 ```

@@ -6,7 +6,7 @@
     query = ms.load("query.msp")
     library = ms.load("library.msp")
     result = mss.library_search(query, library, threshold=0.8)
-    result["cosine_similarity"]          # [0.93, 0.88, ...]
+    result["similarity"]          # [0.93, 0.88, ...]
     q, ref = result.match_records(0)     # the two spectra of row 0
     result.save("hits.mssim")
 
@@ -186,7 +186,7 @@ class SimilarityDataset:
     """A similarity result (one row per spectrum pair), as stored in .mssim.
 
     Columns: key columns (by-key results), ``index1``, ``index2`` (positions in
-    the input datasets), ``cosine_similarity`` (the score of any method; the
+    the input datasets), ``similarity`` (the score of any method; the
     method is in ``metadata["parameters"]``), and ``data_index1`` /
     ``data_index2`` when the matched spectra are embedded.
     """

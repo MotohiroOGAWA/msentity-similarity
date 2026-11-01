@@ -99,7 +99,7 @@ TEST(CApi, LibrarySearchResult) {
   ASSERT_EQ(mssim_n_columns(result.handle), 5);
   char* name = nullptr;
   ASSERT_EQ(mssim_column_name(result.handle, 2, &name), MSENTITY_OK);
-  EXPECT_STREQ(name, "cosine_similarity");
+  EXPECT_STREQ(name, "similarity");
   mssim_string_free(name);
   EXPECT_EQ(mssim_column_name(result.handle, 5, &name), MSENTITY_ERR_OUT_OF_RANGE);
   EXPECT_EQ(int_column(result.handle, "index2"), (std::vector<int64_t>{0, 1, 4, 2, 3, 2, 3, 1, 4}));
@@ -142,7 +142,7 @@ TEST(CApi, LibrarySearchResult) {
   for (auto v : index1) mask.push_back(v == 1 ? 1 : 0);
   Result filtered, sorted, loaded;
   ASSERT_EQ(mssim_filter(result.handle, mask.data(), mask.size(), &filtered.handle), MSENTITY_OK);
-  const char* columns[] = {"cosine_similarity"};
+  const char* columns[] = {"similarity"};
   int32_t ascending[] = {1};
   ASSERT_EQ(mssim_sort_by(filtered.handle, columns, ascending, 1, &sorted.handle), MSENTITY_OK);
   EXPECT_EQ(int_column(sorted.handle, "index2"), (std::vector<int64_t>{4, 1}));

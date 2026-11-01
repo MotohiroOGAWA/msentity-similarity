@@ -15,7 +15,7 @@ public sealed record ScoreHistogram(long[] Counts, double[] Edges);
 /// </summary>
 /// <remarks>
 /// Columns: key columns (by-key results), <c>index1</c>, <c>index2</c> (positions in the input
-/// datasets), <c>cosine_similarity</c> (the score of any method), and <c>data_index1</c> /
+/// datasets), <c>similarity</c> (the score of any method), and <c>data_index1</c> /
 /// <c>data_index2</c> when the compared spectra are embedded. Cell values are <c>null</c>,
 /// <see cref="bool"/>, <see cref="long"/>, <see cref="double"/>, or <see cref="string"/>.
 /// Dispose results when done.

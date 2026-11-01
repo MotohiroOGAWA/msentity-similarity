@@ -58,7 +58,7 @@ example.mssim
   @schema_version = 2                          ← this document
   @data_mode      = "embedded"                 ← matched spectra are included
 │
-├── table.parquet       uint8[1775]            ← a Parquet file: the result table (A)
+├── table.parquet       uint8[1761]            ← a Parquet file: the result table (A)
 │
 ├── metadata.json       string (scalar)        ← calculation metadata as JSON (B)
 │
@@ -78,18 +78,18 @@ example.mssim
 ### A. The result table (`table.parquet`)
 
 ```text
- index1  index2  cosine_similarity  data_index1  data_index2
-      0       0  1.0                          0            0
-      0       1  0.7597143650054932           0            1
-      1       0  0.7597143650054932           1            0
-      1       1  1.0                          1            1
+ index1  index2  similarity          data_index1  data_index2
+      0       0  1.0                           0            0
+      0       1  0.7597143650054932            0            1
+      1       0  0.7597143650054932            1            0
+      1       1  1.0                           1            1
 ```
 
 | Column | Type | Meaning |
 |---|---|---|
 | `index1` | int64 | position (0-based) of the spectrum in the **first / query** input dataset |
 | `index2` | int64 | position of the spectrum in the **second / reference** input dataset |
-| `cosine_similarity` | float32 | the score, in [0, 1]. The column has this name for every method (the method is in the metadata) |
+| `similarity` | float32 | the score, in [0, 1]. The column has this name for every method (the method is in the metadata) |
 | `data_index1` | int64 | row of `matched_data/1/dataset.msds` holding spectrum `index1` (embedded mode only) |
 | `data_index2` | int64 | row of `matched_data/2/dataset.msds` holding spectrum `index2` (embedded mode only) |
 
@@ -102,7 +102,7 @@ Results of a **by-key** calculation start with the key columns. With key
 `SpecID` on both sides there is one key column:
 
 ```text
- SpecID  index1  index2  cosine_similarity
+ SpecID  index1  index2  similarity
  SP1          0       1  1.0
  SP2          1       0  1.0
 ```
@@ -114,7 +114,7 @@ With different key names (for example `ID` and `Key`) there are two, `ID` and
 
 ```jsonc
 {
-  "created_at": "2026-10-27T07:47:15.039020+00:00",  // when the result was calculated (UTC)
+  "created_at": "2026-11-01T11:47:13.493469+00:00",  // when the result was calculated (UTC)
   "mode": "library_search",                // "library_search" or "by_key"
   "algorithm": "tolerance_cosine_similarity_library_search",
                                            // tolerance_<method>_similarity_<mode name>
@@ -184,7 +184,7 @@ the original input files, which must be kept to look the spectra up.
 4. `table.parquet` MUST be a one-dimensional `uint8` dataset holding a
    complete Parquet file.
 5. The table MUST have the columns `index1`, `index2` (integers), and
-   `cosine_similarity` (numbers). Writers SHOULD store the indices as int64 and
+   `similarity` (numbers). Writers SHOULD store the indices as int64 and
    scores as float32.
 6. Every score MUST be finite and in [0, 1].
 7. `index1` / `index2` are 0-based positions in the input datasets as they were

@@ -65,7 +65,7 @@ class SimilarityTest {
         assertEquals(25_025, last.get());
         assertEquals(9, result.size());
         assertEquals(
-            List.of("index1", "index2", "cosine_similarity", "data_index1", "data_index2"),
+            List.of("index1", "index2", "similarity", "data_index1", "data_index2"),
             result.columns());
         assertEquals(List.of(0L, 1L, 4L, 2L, 3L, 2L, 3L, 1L, 4L), result.column("index2"));
         assertTrue(result.metadataJson().contains("\"mode\":\"library_search\""));
@@ -87,7 +87,7 @@ class SimilarityTest {
       ds.setSpecId("SpecID", "SP", false, 0);
       try (Dataset reordered = ds.select(4, 3, 2);
           SimilarityDataset result = Similarity.similarityByKey(ds, reordered)) {
-        assertEquals(List.of("SpecID", "index1", "index2", "cosine_similarity"), result.columns());
+        assertEquals(List.of("SpecID", "index1", "index2", "similarity"), result.columns());
         assertEquals(List.of(2L, 3L, 4L), result.column("index1"));
         assertEquals(List.of(2L, 1L, 0L), result.column("index2"));
         assertFalse(result.hasMatchedData());
@@ -107,7 +107,7 @@ class SimilarityTest {
       boolean[] mask = new boolean[index1.size()];
       for (int i = 0; i < mask.length; i++) mask[i] = index1.get(i).equals(1L);
       try (SimilarityDataset filtered = result.filter(mask);
-          SimilarityDataset ranked = filtered.sortBy("cosine_similarity", false)) {
+          SimilarityDataset ranked = filtered.sortBy("similarity", false)) {
         assertEquals(List.of(1L, 4L), ranked.column("index2"));
         Path path = tmp.resolve("hits.mssim");
         ranked.save(path);
@@ -116,7 +116,7 @@ class SimilarityTest {
           assertArrayEquals(new long[] {1, 4}, loaded.sourceIndices(2));
           loaded.exportTable(tmp.resolve("hits.tsv"));
           assertTrue(
-              Files.readString(tmp.resolve("hits.tsv")).startsWith("index1\tindex2\tcosine_similarity"));
+              Files.readString(tmp.resolve("hits.tsv")).startsWith("index1\tindex2\tsimilarity"));
         }
       }
       assertThrows(

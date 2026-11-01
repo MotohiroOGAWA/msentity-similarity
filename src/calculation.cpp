@@ -300,10 +300,10 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
   if (!ds1.has_column(key1)) throw KeyError("ds1 does not contain key column: " + key1);
   if (!ds2.has_column(key2)) throw KeyError("ds2 does not contain key column: " + key2);
   for (const auto& key : {key1, key2}) {
-    if (key == "index1" || key == "index2" || key == "cosine_similarity") {
+    if (key == "index1" || key == "index2" || key == "similarity") {
       throw std::invalid_argument(
           "Key column names must not collide with result columns: index1, index2, "
-          "cosine_similarity");
+          "similarity");
     }
   }
   auto values1 = ds1.column_values(key1);
@@ -362,7 +362,7 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
   if (key2 != key1) add(key2, internal::values_to_array(matched2));
   add("index1", int64_array(index1));
   add("index2", int64_array(index2));
-  add("cosine_similarity", float_array(scores));
+  add("similarity", float_array(scores));
   return arrow::Table::Make(arrow::schema(fields), arrays, static_cast<int64_t>(index1.size()));
 }
 
@@ -411,7 +411,7 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
   }
   return arrow::Table::Make(
       arrow::schema({arrow::field("index1", arrow::int64()), arrow::field("index2", arrow::int64()),
-                     arrow::field("cosine_similarity", arrow::float32())}),
+                     arrow::field("similarity", arrow::float32())}),
       {int64_array(index1), int64_array(index2), float_array(scores)},
       static_cast<int64_t>(scores.size()));
 }

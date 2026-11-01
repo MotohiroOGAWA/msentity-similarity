@@ -50,7 +50,7 @@ std::vector<int64_t> int_column(const arrow::Table& table, const std::string& na
 std::vector<double> score_values(const arrow::Table& table) {
   std::vector<double> scores;
   for (const auto& value : internal::to_values(
-           *table.column(column_index(table, "cosine_similarity")))) {
+           *table.column(column_index(table, "similarity")))) {
     double score = kNaN;
     if (const auto* d = std::get_if<double>(&value)) score = *d;
     if (const auto* i = std::get_if<int64_t>(&value)) score = static_cast<double>(*i);
@@ -131,7 +131,7 @@ void SimilarityDataset::validate() const {
   if (!table_) throw std::invalid_argument("table must not be null");
   parse_object(metadata_json_);
   std::vector<std::string> missing_columns;
-  for (const char* column : {"cosine_similarity", "index1", "index2"}) {
+  for (const char* column : {"similarity", "index1", "index2"}) {
     if (column_index(*table_, column) < 0) missing_columns.push_back(column);
   }
   if (!missing_columns.empty()) {
@@ -139,7 +139,7 @@ void SimilarityDataset::validate() const {
     for (const auto& m : missing_columns) list += (list.empty() ? "'" : ", '") + m + "'";
     throw std::invalid_argument("Similarity table is missing required columns: [" + list + "]");
   }
-  auto type = table_->column(column_index(*table_, "cosine_similarity"))->type()->id();
+  auto type = table_->column(column_index(*table_, "similarity"))->type()->id();
   if (!(arrow::is_integer(type) || arrow::is_floating(type) || type == arrow::Type::BOOL)) {
     throw std::invalid_argument("Similarity scores must be numeric");
   }
