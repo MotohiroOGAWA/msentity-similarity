@@ -82,6 +82,7 @@ class TestCalculation(unittest.TestCase):
         self.assertEqual(len(result), 9)
         self.assertEqual(calls[-1], (25, 25))
         self.assertEqual(result.columns, ["index1", "index2", "similarity",
+                                          "intensity_coverage1", "intensity_coverage2",
                                           "data_index1", "data_index2"])
         self.assertEqual(result["index2"], [0, 1, 4, 2, 3, 2, 3, 1, 4])
         metadata = result.metadata
@@ -102,7 +103,8 @@ class TestCalculation(unittest.TestCase):
         reordered = self.ds[[4, 3, 2]]
         result = mss.similarity_by_key(self.ds, reordered, method="reverse_cosine")
         # The score column keeps its name for every method.
-        self.assertEqual(result.columns, ["SpecID", "index1", "index2", "similarity"])
+        self.assertEqual(result.columns, ["SpecID", "index1", "index2", "similarity",
+                                          "intensity_coverage1", "intensity_coverage2"])
         self.assertEqual(result.metadata["parameters"]["method"], "reverse_cosine")
         self.assertEqual(result["index1"], [2, 3, 4])
         self.assertEqual(result["index2"], [2, 1, 0])

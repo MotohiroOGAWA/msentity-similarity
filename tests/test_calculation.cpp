@@ -18,6 +18,63 @@ MSDataset sample() { return io::read_msp(msentity_data("sample.msp")); }
 
 // ---- definition on hand-made spectra ------------------------------------------
 
+// Column `name` of a result table as doubles.
+std::vector<double> float_column(const arrow::Table& table, const std::string& name) {
+  std::vector<double> out;
+  for (const auto& value : internal::to_values(*table.GetColumnByName(name))) {
+    out.push_back(std::get<double>(value));
+  }
+  return out;
+}
+
+TEST(Coverage, MatchedShareOfSquaredIntensities) {
+  // a: 100 (3), 200 (4); b: 100 (1), 300 (1). Only 100 matches.
+  MSDataset a = spectra({{{100.0, 3.0}, {200.0, 4.0}}, {}});
+  MSDataset b = spectra({{{100.0, 1.0}, {300.0, 1.0}}, {{100.0, 2.0}}});
+  a.set_column("ID", std::vector<Value>{std::string("x"), std::string("y")});
+  b.set_column("ID", std::vector<Value>{std::string("x"), std::string("y")});
+  auto table = similarity_by_key(a, b, "ID", "ID");
+  auto c1 = float_column(*table, "intensity_coverage1");
+  auto c2 = float_column(*table, "intensity_coverage2");
+  auto s = float_column(*table, "similarity");
+  EXPECT_FLOAT_EQ(c1[0], 9.0f / 25.0f);  // 3² / (3² + 4²)
+  EXPECT_FLOAT_EQ(c2[0], 0.5f);          // 1² / (1² + 1²)
+  EXPECT_EQ(c1[1], 0.0);                 // empty spectrum
+  EXPECT_EQ(c2[1], 0.0);
+
+  // Exponent 0.5: coverage is the plain intensity share, 3 / 7.
+  Options root;
+  root.intensity_exponent = 0.5;
+  auto rooted = similarity_by_key(a, b, "ID", "ID", root);
+  EXPECT_FLOAT_EQ(float_column(*rooted, "intensity_coverage1")[0], 3.0f / 7.0f);
+
+  // cosine <= sqrt(c1 c2); reverse cosine <= sqrt(c2).
+  EXPECT_LE(s[0], std::sqrt(c1[0] * c2[0]) + 1e-6);
+  Options reverse;
+  reverse.method = Method::ReverseCosine;
+  auto reversed = similarity_by_key(a, b, "ID", "ID", reverse);
+  EXPECT_LE(float_column(*reversed, "similarity")[0],
+            std::sqrt(float_column(*reversed, "intensity_coverage2")[0]) + 1e-6);
+}
+
+TEST(Coverage, BoundHoldsOnSampleLibrarySearch) {
+  MSDataset ds = sample();
+  for (double exponent : {0.5, 1.0}) {
+    Options options;
+    options.intensity_exponent = exponent;
+    auto table = library_search(ds, ds, 0.0, options);
+    auto s = float_column(*table, "similarity");
+    auto c1 = float_column(*table, "intensity_coverage1");
+    auto c2 = float_column(*table, "intensity_coverage2");
+    ASSERT_EQ(s.size(), c1.size());
+    for (std::size_t i = 0; i < s.size(); ++i) {
+      EXPECT_GE(c1[i], 0.0);
+      EXPECT_LE(c1[i], 1.0);
+      EXPECT_LE(s[i], std::sqrt(c1[i] * c2[i]) + 1e-6);
+    }
+  }
+}
+
 TEST(Score, CosineAndReverseCosine) {
   // a: 100, 200; b: 100, 300 (unit intensities).
   MSDataset a = spectra({{{100.0, 1.0}, {200.0, 1.0}}});
@@ -249,7 +306,8 @@ TEST(ByKey, PairsEqualKeysInFirstDatasetOrder) {
   ds2.set_column("Key", std::vector<Value>{std::string("d"), std::string("a"), std::string("x")});
   auto table = similarity_by_key(ds1, ds2, "ID", "Key");
   EXPECT_EQ(internal::column_names(*table),
-            (std::vector<std::string>{"ID", "Key", "index1", "index2", "similarity"}));
+            (std::vector<std::string>{"ID", "Key", "index1", "index2", "similarity",
+                                      "intensity_coverage1", "intensity_coverage2"}));
   EXPECT_EQ(table->num_rows(), 2);
   auto ids = internal::to_values(*table->column(0));
   EXPECT_EQ(std::get<std::string>(ids[0]), "a");
@@ -262,7 +320,8 @@ TEST(ByKey, PairsEqualKeysInFirstDatasetOrder) {
   ds2.set_column("N", std::vector<Value>{4.0, 1.0, 7.0});
   auto numeric = similarity_by_key(ds1, ds2, "N", "N");
   EXPECT_EQ(internal::column_names(*numeric),
-            (std::vector<std::string>{"N", "index1", "index2", "similarity"}));
+            (std::vector<std::string>{"N", "index1", "index2", "similarity",
+                                      "intensity_coverage1", "intensity_coverage2"}));
   EXPECT_EQ(numeric->num_rows(), 2);
 }
 
@@ -273,6 +332,9 @@ TEST(ByKey, Errors) {
   EXPECT_THROW(similarity_by_key(ds, ds, "Missing", "ID"), KeyError);
   ds.set_column("index1", Value(int64_t{1}));
   EXPECT_THROW(similarity_by_key(ds, ds, "index1", "index1"), std::invalid_argument);  // reserved
+  ds.set_column("intensity_coverage1", Value(int64_t{1}));
+  EXPECT_THROW(similarity_by_key(ds, ds, "intensity_coverage1", "intensity_coverage1"),
+               std::invalid_argument);
 }
 
 }  // namespace

@@ -77,7 +77,8 @@ class SimilarityTest {
         assertEquals(25_025, last.get());
         assertEquals(9, result.size());
         assertEquals(
-            List.of("index1", "index2", "similarity", "data_index1", "data_index2"),
+            List.of("index1", "index2", "similarity", "intensity_coverage1",
+                "intensity_coverage2", "data_index1", "data_index2"),
             result.columns());
         assertEquals(List.of(0L, 1L, 4L, 2L, 3L, 2L, 3L, 1L, 4L), result.column("index2"));
         assertTrue(result.metadataJson().contains("\"mode\":\"library_search\""));
@@ -99,7 +100,8 @@ class SimilarityTest {
       ds.setSpecId("SpecID", "SP", false, 0);
       try (Dataset reordered = ds.select(4, 3, 2);
           SimilarityDataset result = Similarity.similarityByKey(ds, reordered)) {
-        assertEquals(List.of("SpecID", "index1", "index2", "similarity"), result.columns());
+        assertEquals(List.of("SpecID", "index1", "index2", "similarity",
+                "intensity_coverage1", "intensity_coverage2"), result.columns());
         assertEquals(List.of(2L, 3L, 4L), result.column("index1"));
         assertEquals(List.of(2L, 1L, 0L), result.column("index2"));
         assertFalse(result.hasMatchedData());

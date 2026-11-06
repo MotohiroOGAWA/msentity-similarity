@@ -78,21 +78,26 @@ sim::SimilarityDataset hits = sim::calculate_library_search(
     [](int64_t done, int64_t total) {});  // optional progress callback
 
 hits.size();      // 4
-hits.columns();   // {"index1", "index2", "similarity", "data_index1", "data_index2"}
+hits.columns();   // {"index1", "index2", "similarity", "intensity_coverage1",
+                  //  "intensity_coverage2", "data_index1", "data_index2"}
 ```
 
 The result table:
 
 ```text
- index1  index2  similarity  data_index1  data_index2
-      0       0  1.0                   0            0
-      0       1  0.759714              0            1
-      1       0  0.759714              1            0
-      1       1  1.0                   1            1
+ index1  index2  similarity  intensity_coverage1  intensity_coverage2  data_index1  data_index2
+      0       0  1.0         1.0                  1.0                            0            0
+      0       1  0.759714    0.92927              1.0                            0            1
+      1       0  0.759714    1.0                  0.92927                        1            0
+      1       1  1.0         1.0                  1.0                            1            1
 ```
 
 * `index1` / `index2` — positions in the query / reference dataset.
 * `similarity` — the score of every method; the method is `parameters.method` in the metadata.
+* `intensity_coverage1` / `intensity_coverage2` — share of each spectrum's
+  squared (exponentiated) intensity carried by its matched peaks; the cosine
+  never exceeds `sqrt(intensity_coverage1 · intensity_coverage2)`
+  ([similarity.md](similarity.md#5-intensity-coverage)).
 * `data_index1` / `data_index2` — rows of the embedded spectra (only with
   `include_matched_data`).
 
@@ -148,11 +153,11 @@ hits.export_table("hits.csv");          // table only: .csv, .tsv, or .parquet
 `hits.csv`:
 
 ```text
-index1,index2,similarity,data_index1,data_index2
-0,0,1.0,0,0
-0,1,0.7597143650054932,0,1
-1,0,0.7597143650054932,1,0
-1,1,1.0,1,1
+index1,index2,similarity,intensity_coverage1,intensity_coverage2,data_index1,data_index2
+0,0,1.0,1.0,1.0,0,0
+0,1,0.7597143650054932,0.9292697906494141,1.0,0,1
+1,0,0.7597143650054932,1.0,0.9292697906494141,1,0
+1,1,1.0,1.0,1.0,1,1
 ```
 
 The file layout is specified in [format/mssim.md](format/mssim.md).
@@ -173,10 +178,11 @@ sim::SimilarityDataset by_key = sim::calculate_similarity(
     false,                 // include_matched_data (default false)
     "a.msds", "b.msds");   // sources for the metadata
 
-by_key.columns();          // {"SpecID", "index1", "index2", "similarity"}
-// SpecID index1 index2 similarity
-// SP1         0      1  1.0
-// SP2         1      0  1.0
+by_key.columns();          // {"SpecID", "index1", "index2", "similarity",
+                           //  "intensity_coverage1", "intensity_coverage2"}
+// SpecID index1 index2 similarity intensity_coverage1 intensity_coverage2
+// SP1         0      1  1.0        1.0                 1.0
+// SP2         1      0  1.0        1.0                 1.0
 ```
 
 Key values must be unique within each dataset (`std::invalid_argument`

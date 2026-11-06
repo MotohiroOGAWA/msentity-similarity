@@ -26,6 +26,13 @@ namespace msentity::similarity {
 //                   (query) spectrum without a partner in the second do not
 //                   count, so noise in the query is tolerated.
 // Scores are clipped to [0, 1]; a zero denominator gives 0.
+//
+// Result tables also report the intensity coverage of each side,
+//   intensity_coverage = Σ_matched I^(2·exponent) / Σ_all I^(2·exponent),
+// the share of the spectrum's squared norm carried by its matched peaks (0
+// for a spectrum without positive intensity). By Cauchy–Schwarz,
+//   cosine         <= sqrt(intensity_coverage1 · intensity_coverage2)
+//   reverse_cosine <= sqrt(intensity_coverage2).
 enum class Method { Cosine, ReverseCosine };
 
 // "cosine" / "reverse_cosine".
@@ -70,7 +77,8 @@ std::vector<float> all_pairs_matrix(const MSDataset& ds1, const MSDataset& ds2,
 // Pair spectra whose metadata keys are equal (ds1[key1] == ds2[key2]) and
 // score them. Missing keys are skipped; a key value that occurs twice in one
 // dataset is an error. Columns: key1 [, key2 if different], index1, index2,
-// similarity (float32); rows in ds1 order.
+// similarity, intensity_coverage1, intensity_coverage2 (float32); rows in ds1
+// order.
 std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDataset& ds2,
                                                 const std::string& key1 = "SpecID",
                                                 const std::string& key2 = "SpecID",
@@ -78,7 +86,8 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
 
 // Score every query spectrum against every reference spectrum and keep the
 // pairs with score >= threshold. Columns: index1 (query), index2
-// (reference), similarity (float32); rows ordered by index1, index2.
+// (reference), similarity, intensity_coverage1, intensity_coverage2
+// (float32); rows ordered by index1, index2.
 std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDataset& reference,
                                              double threshold = 0.8,
                                              const Options& options = {},

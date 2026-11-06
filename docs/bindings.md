@@ -41,7 +41,8 @@ hits = mss.library_search(ds, ds, 0.7,
                           query_source="example.msp",          # recorded in the metadata
                           progress=lambda done, total: None)    # optional
 len(hits)                       # 4
-hits.columns                    # ['index1', 'index2', 'similarity', 'data_index1', 'data_index2']
+hits.columns                    # ['index1', 'index2', 'similarity', 'intensity_coverage1',
+                                #  'intensity_coverage2', 'data_index1', 'data_index2']
 hits["similarity"]       # [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
 hits.metadata["parameters"]     # {'threshold': 0.7, 'method': 'cosine', 'mz_tolerance_da': 0.01,
                                 #  'mz_tolerance_ppm': 10.0, 'intensity_exponent': 1.0}
@@ -102,7 +103,8 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
            "example.msp", "example.msp",    // sources for the metadata
            (done, total) -> {})) {          // progress, may be null
     hits.size();                            // 4
-    hits.columns();      // [index1, index2, similarity, data_index1, data_index2]
+    hits.columns();      // [index1, index2, similarity, intensity_coverage1,
+                         //  intensity_coverage2, data_index1, data_index2]
     hits.column("similarity");       // [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
     hits.metadataJson();                    // {"created_at":"…","mode":"library_search",…}
 
@@ -156,7 +158,8 @@ new SimilarityOptions().FormatMzTolerance();   // "0.01Da,10ppm"
 using var hits = SpectrumSimilarity.LibrarySearch(ds, ds, threshold: 0.7,
     querySource: "example.msp", progress: (done, total) => { });
 hits.Count;                          // 4
-hits.Columns;                        // index1, index2, similarity, data_index1, data_index2
+hits.Columns;                        // index1, index2, similarity, intensity_coverage1,
+                                     // intensity_coverage2, data_index1, data_index2
 hits["similarity"];           // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
 hits.MetadataJson;                   // {"created_at":"…","mode":"library_search",…}
 

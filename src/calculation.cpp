@@ -113,20 +113,35 @@ struct Candidate {
   uint32_t second;
 };
 
+// The score of a pair and the intensity coverage of each side: the share of
+// the spectrum's squared norm (Σ intensity^(2·exponent)) carried by its
+// matched peaks. cosine <= sqrt(coverage1 · coverage2) by Cauchy–Schwarz.
+struct Scored {
+  float similarity = 0.0f;
+  float coverage1 = 0.0f;
+  float coverage2 = 0.0f;
+};
+
+float clip_unit(double value) {
+  if (!(value >= 0.0)) value = std::isnan(value) ? value : 0.0;  // keep NaN, clip negatives
+  if (value > 1.0) value = 1.0;
+  return static_cast<float>(value);
+}
+
 // Peaks are paired one-to-one: candidate pairs within tolerance are taken in
 // order of increasing m/z difference (ties: original peak order of the first,
 // then the second spectrum), skipping pairs whose peaks are already used.
-float score(const PreparedSpectrum& a, const PreparedSpectrum& b, const Tolerance& tolerance,
-            Method method) {
+Scored score_pair(const PreparedSpectrum& a, const PreparedSpectrum& b, const Tolerance& tolerance,
+                  Method method) {
   // Per-thread buffers: scoring a pair allocates nothing once they have grown.
   thread_local std::vector<Candidate> candidates;
   thread_local std::vector<char> used_a, used_b;
   candidates.clear();
 
-  if (a.peaks.empty() || b.peaks.empty()) return 0.0f;
+  if (a.peaks.empty() || b.peaks.empty()) return {};
   if (tolerance.window(a.peaks.back().mz).second < b.peaks.front().mz ||
       tolerance.window(a.peaks.front().mz).first > b.peaks.back().mz) {
-    return 0.0f;  // m/z ranges too far apart
+    return {};  // m/z ranges too far apart
   }
   std::size_t start = 0;
   for (std::size_t i = 0; i < a.peaks.size(); ++i) {
@@ -140,7 +155,7 @@ float score(const PreparedSpectrum& a, const PreparedSpectrum& b, const Toleranc
       }
     }
   }
-  if (candidates.empty()) return 0.0f;
+  if (candidates.empty()) return {};
   std::sort(candidates.begin(), candidates.end(), [&](const Candidate& x, const Candidate& y) {
     if (x.difference != y.difference) return x.difference < y.difference;
     if (x.first != y.first) return a.peaks[x.first].original_index < a.peaks[y.first].original_index;
@@ -151,19 +166,28 @@ float score(const PreparedSpectrum& a, const PreparedSpectrum& b, const Toleranc
   used_b.assign(b.peaks.size(), 0);
   double dot = 0.0;
   double matched_norm_a = 0.0;
+  double matched_norm_b = 0.0;
   for (const auto& candidate : candidates) {
     if (used_a[candidate.first] || used_b[candidate.second]) continue;
     used_a[candidate.first] = used_b[candidate.second] = 1;
     double intensity_a = a.peaks[candidate.first].intensity;
-    dot += intensity_a * b.peaks[candidate.second].intensity;
+    double intensity_b = b.peaks[candidate.second].intensity;
+    dot += intensity_a * intensity_b;
     matched_norm_a += intensity_a * intensity_a;
+    matched_norm_b += intensity_b * intensity_b;
   }
   double norm_a = method == Method::ReverseCosine ? matched_norm_a : a.norm;
   double denominator = std::sqrt(norm_a * b.norm);
-  double value = denominator > 0 ? dot / denominator : 0.0;
-  if (!(value >= 0.0)) value = std::isnan(value) ? value : 0.0;  // keep NaN, clip negatives
-  if (value > 1.0) value = 1.0;
-  return static_cast<float>(value);
+  Scored result;
+  result.similarity = clip_unit(denominator > 0 ? dot / denominator : 0.0);
+  result.coverage1 = clip_unit(a.norm > 0 ? matched_norm_a / a.norm : 0.0);
+  result.coverage2 = clip_unit(b.norm > 0 ? matched_norm_b / b.norm : 0.0);
+  return result;
+}
+
+float score(const PreparedSpectrum& a, const PreparedSpectrum& b, const Tolerance& tolerance,
+            Method method) {
+  return score_pair(a, b, tolerance, method).similarity;
 }
 
 std::vector<PreparedSpectrum> prepare_all(const MSDataset& dataset, const Options& options) {
@@ -320,9 +344,12 @@ std::string format_mz_tolerance(double da, double ppm) {
   return text;
 }
 
-std::vector<float> pair_scores(const MSDataset& ds1, const std::vector<int64_t>& index1,
-                               const MSDataset& ds2, const std::vector<int64_t>& index2,
-                               const Options& options) {
+namespace {
+
+// Score and intensity coverages of ds1[index1[k]] vs ds2[index2[k]].
+std::vector<Scored> pair_details(const MSDataset& ds1, const std::vector<int64_t>& index1,
+                                 const MSDataset& ds2, const std::vector<int64_t>& index2,
+                                 const Options& options) {
   validate(options);
   if (index1.size() != index2.size()) {
     throw std::invalid_argument("index1 and index2 must have the same length");
@@ -345,13 +372,26 @@ std::vector<float> pair_scores(const MSDataset& ds1, const std::vector<int64_t>&
   const Tolerance tolerance(options);
 
   const int64_t n = static_cast<int64_t>(index1.size());
-  std::vector<float> scores(static_cast<std::size_t>(n));
+  std::vector<Scored> scores(static_cast<std::size_t>(n));
   parallel_ranges(n, thread_count(options, n), [&](int64_t begin, int64_t end) {
     for (int64_t k = begin; k < end; ++k) {
       auto u = static_cast<std::size_t>(k);
-      scores[u] = score(prepared1.at(index1[u]), prepared2.at(index2[u]), tolerance, options.method);
+      scores[u] = score_pair(prepared1.at(index1[u]), prepared2.at(index2[u]), tolerance,
+                             options.method);
     }
   });
+  return scores;
+}
+
+}  // namespace
+
+std::vector<float> pair_scores(const MSDataset& ds1, const std::vector<int64_t>& index1,
+                               const MSDataset& ds2, const std::vector<int64_t>& index2,
+                               const Options& options) {
+  auto details = pair_details(ds1, index1, ds2, index2, options);
+  std::vector<float> scores;
+  scores.reserve(details.size());
+  for (const auto& detail : details) scores.push_back(detail.similarity);
   return scores;
 }
 
@@ -383,10 +423,11 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
   if (!ds1.has_column(key1)) throw KeyError("ds1 does not contain key column: " + key1);
   if (!ds2.has_column(key2)) throw KeyError("ds2 does not contain key column: " + key2);
   for (const auto& key : {key1, key2}) {
-    if (key == "index1" || key == "index2" || key == "similarity") {
+    if (key == "index1" || key == "index2" || key == "similarity" ||
+        key == "intensity_coverage1" || key == "intensity_coverage2") {
       throw std::invalid_argument(
           "Key column names must not collide with result columns: index1, index2, "
-          "similarity");
+          "similarity, intensity_coverage1, intensity_coverage2");
     }
   }
   auto values1 = ds1.column_values(key1);
@@ -433,7 +474,13 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
     matched1.push_back(values1[i]);
     matched2.push_back(values2[static_cast<std::size_t>(it->second)]);
   }
-  auto scores = pair_scores(ds1, index1, ds2, index2, options);
+  auto details = pair_details(ds1, index1, ds2, index2, options);
+  std::vector<float> scores, coverage1, coverage2;
+  for (const auto& detail : details) {
+    scores.push_back(detail.similarity);
+    coverage1.push_back(detail.coverage1);
+    coverage2.push_back(detail.coverage2);
+  }
 
   std::vector<std::shared_ptr<arrow::Field>> fields;
   std::vector<std::shared_ptr<arrow::Array>> arrays;
@@ -446,6 +493,8 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
   add("index1", int64_array(index1));
   add("index2", int64_array(index2));
   add("similarity", float_array(scores));
+  add("intensity_coverage1", float_array(coverage1));
+  add("intensity_coverage2", float_array(coverage2));
   return arrow::Table::Make(arrow::schema(fields), arrays, static_cast<int64_t>(index1.size()));
 }
 
@@ -463,7 +512,7 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
   const Tolerance tolerance(options);
 
   // Hits of each query row, filled in parallel, joined in order.
-  std::vector<std::vector<std::pair<int64_t, float>>> hits(static_cast<std::size_t>(n_query));
+  std::vector<std::vector<std::pair<int64_t, Scored>>> hits(static_cast<std::size_t>(n_query));
   const unsigned threads = thread_count(options, total);
   const int64_t batch = std::max<int64_t>(1, 4096 / std::max<int64_t>(1, n_reference) + 1) * threads;
   if (progress) progress(0, total);
@@ -473,10 +522,10 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
       for (int64_t q = start + begin; q < start + end; ++q) {
         auto& row = hits[static_cast<std::size_t>(q)];
         for (int64_t r = 0; r < n_reference; ++r) {
-          float s = score(prepared_query[static_cast<std::size_t>(q)],
-                          prepared_reference[static_cast<std::size_t>(r)], tolerance,
-                          options.method);
-          if (s >= threshold) row.emplace_back(r, s);
+          Scored s = score_pair(prepared_query[static_cast<std::size_t>(q)],
+                                prepared_reference[static_cast<std::size_t>(r)], tolerance,
+                                options.method);
+          if (s.similarity >= threshold) row.emplace_back(r, s);
         }
       }
     });
@@ -484,18 +533,23 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
   }
 
   std::vector<int64_t> index1, index2;
-  std::vector<float> scores;
+  std::vector<float> scores, coverage1, coverage2;
   for (int64_t q = 0; q < n_query; ++q) {
     for (const auto& [r, s] : hits[static_cast<std::size_t>(q)]) {
       index1.push_back(q);
       index2.push_back(r);
-      scores.push_back(s);
+      scores.push_back(s.similarity);
+      coverage1.push_back(s.coverage1);
+      coverage2.push_back(s.coverage2);
     }
   }
   return arrow::Table::Make(
       arrow::schema({arrow::field("index1", arrow::int64()), arrow::field("index2", arrow::int64()),
-                     arrow::field("similarity", arrow::float32())}),
-      {int64_array(index1), int64_array(index2), float_array(scores)},
+                     arrow::field("similarity", arrow::float32()),
+                     arrow::field("intensity_coverage1", arrow::float32()),
+                     arrow::field("intensity_coverage2", arrow::float32())}),
+      {int64_array(index1), int64_array(index2), float_array(scores), float_array(coverage1),
+       float_array(coverage2)},
       static_cast<int64_t>(scores.size()));
 }
 
