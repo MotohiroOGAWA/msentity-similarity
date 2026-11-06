@@ -1,13 +1,17 @@
 # Installation
 
-`msentity-similarity` uses the released `msentity` version `0.1.0`. The same
-version is pinned in CMake and in every language binding so that a similarity
-release is tested against one known data-model release.
+Each msentity-similarity release depends on one msentity release: CMake fetches
+its tag and every language package requires that version. The examples use
+msentity-similarity 1.2.1, the latest release when this page was written.
+To use another version, replace the msentity-similarity version `1.2.1`.
+The msentity release it depends on is named in its release notes and in
+`CMakeLists.txt` (`GIT_TAG`); for these examples, msentity 1.2.0.
 
 ## C
 
-Build the shared C API and include
-`msentity/similarity/c/msentity_similarity_c.h`:
+Each release attaches `msentity-similarity-c-<version>-<platform>.zip` with
+the similarity and msentity headers and libraries. To build the C API
+yourself, include `msentity/similarity/c/msentity_similarity_c.h`:
 
 ```console
 cmake -S . -B build -G Ninja -DMSENTITY_SIMILARITY_BUILD_C_API=ON
@@ -27,7 +31,7 @@ compatible released `msentity` automatically:
 include(FetchContent)
 FetchContent_Declare(msentity_similarity
   GIT_REPOSITORY https://github.com/MotohiroOGAWA/msentity-similarity.git
-  GIT_TAG v0.1.0)
+  GIT_TAG v1.2.1)  # msentity-similarity release
 FetchContent_MakeAvailable(msentity_similarity)
 
 target_link_libraries(app PRIVATE msentity::similarity)
@@ -39,20 +43,16 @@ both repositories together.
 
 ## Python (≥ 3.10)
 
-Install the latest release from the GitHub Pages wheel index:
+The wheels are attached to the GitHub Releases. Give pip the release page of
+msentity-similarity and that of the msentity release it depends on:
 
 ```console
-pip install msentity-similarity \
-  --find-links https://motohiroogawa.github.io/msentity-similarity/
+pip install msentity-similarity==1.2.1 \
+  --find-links https://github.com/MotohiroOGAWA/msentity-similarity/releases/expanded_assets/v1.2.1 \
+  --find-links https://github.com/MotohiroOGAWA/msentity/releases/expanded_assets/v1.2.0
 ```
 
-The package metadata installs the compatible `msentity==0.1.0` automatically.
-Pin the similarity version for a reproducible environment:
-
-```console
-pip install msentity-similarity==0.1.0 \
-  --find-links https://motohiroogawa.github.io/msentity-similarity/
-```
+(Earlier instructions used a GitHub Pages index; it is no longer updated.) <!-- fixed -->
 
 ```python
 import msentity as ms
@@ -71,10 +71,12 @@ contains its native library for every supported platform; the msentity JAR does
 the same for the dataset API:
 
 ```console
-curl -LO https://github.com/MotohiroOGAWA/msentity/releases/download/v0.1.0/msentity-0.1.0.jar
-curl -LO https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v0.1.0/msentity-similarity-0.1.0.jar
-java --enable-native-access=ALL-UNNAMED \
-  -cp 'app.jar:msentity-0.1.0.jar:msentity-similarity-0.1.0.jar' app.Main
+mkdir -p lib
+curl -L -o lib/msentity.jar \
+  https://github.com/MotohiroOGAWA/msentity/releases/download/v1.2.0/msentity-1.2.0.jar
+curl -L -o lib/msentity-similarity.jar \
+  https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v1.2.1/msentity-similarity-1.2.1.jar
+java --enable-native-access=ALL-UNNAMED -cp 'app.jar:lib/*' app.Main
 ```
 
 ## C#
@@ -83,11 +85,12 @@ Download both NuGet packages from their GitHub Releases into one directory,
 then add that directory as the package source:
 
 ```console
-curl -LO https://github.com/MotohiroOGAWA/msentity/releases/download/v0.1.0/MsEntity.0.1.0.nupkg
-curl -LO https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v0.1.0/MsEntity.Similarity.0.1.0.nupkg
-mkdir packages
-mv MsEntity*.nupkg packages/
-dotnet add package MsEntity.Similarity --version 0.1.0 --source ./packages
+mkdir -p packages
+curl -L -o packages/MsEntity.1.2.0.nupkg \
+  https://github.com/MotohiroOGAWA/msentity/releases/download/v1.2.0/MsEntity.1.2.0.nupkg
+curl -L -o packages/MsEntity.Similarity.1.2.1.nupkg \
+  https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v1.2.1/MsEntity.Similarity.1.2.1.nupkg
+dotnet add package MsEntity.Similarity --version 1.2.1 --source ./packages
 ```
 
 ## Building and testing from source
@@ -98,16 +101,17 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-CMake downloads `msentity` tag `v0.1.0`. To test unpublished changes in both
-repositories, override it explicitly:
+CMake downloads the msentity tag named in `CMakeLists.txt` (`GIT_TAG`). To test
+unpublished changes in both repositories, override it explicitly:
 
 ```console
 cmake -S . -B build -G Ninja \
   -DFETCHCONTENT_SOURCE_DIR_MSENTITY=../msentity
 ```
 
-Release tags build self-contained wheels for Linux x64 and Windows x64, attach
-them to a GitHub Release, and update the GitHub Pages pip index
-using the [release workflow](../.github/workflows/release.yml). The similarity
-index also links the compatible `msentity==0.1.0` wheels, so one command installs
-both packages.
+## How releases are made
+
+Releases are built and tested on Ubuntu 22.04 (Linux x64, glibc 2.35) and on
+Windows (x64), and every package is attached to the GitHub Release of the tag
+`v<version>`. The maintainers' scripts are in
+[msentity-spectrum-viewer/scripts/release-all](https://github.com/MotohiroOGAWA/msentity-spectrum-viewer/tree/main/scripts/release-all).
