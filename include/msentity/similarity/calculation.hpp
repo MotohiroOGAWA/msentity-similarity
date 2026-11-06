@@ -44,7 +44,11 @@ namespace msentity::similarity {
 // for a spectrum without positive intensity). By Cauchy–Schwarz,
 //   cosine         <= sqrt(intensity_coverage1 · intensity_coverage2)
 //   reverse_cosine <= sqrt(intensity_coverage2).
-// No such bound holds for modified_cosine or bonanza.
+// With modified_cosine or bonanza, the tables also have
+// modified_intensity_coverage1/2: the same shares under their pairing (direct
+// and shifted pairs; null without a precursor m/z), and
+//   modified_cosine <= sqrt(modified_intensity_coverage1 · modified_intensity_coverage2).
+// No such bound holds for bonanza.
 enum class Method { Cosine, ReverseCosine, ModifiedCosine, Bonanza };
 
 // Every method, in the order of result columns.
@@ -110,7 +114,9 @@ std::vector<float> all_pairs_matrix(const MSDataset& ds1, const MSDataset& ds2,
 // score them. Missing keys are skipped; a key value that occurs twice in one
 // dataset is an error. Columns: key1 [, key2 if different], index1, index2,
 // one float32 column per selected method (named by method_name),
-// intensity_coverage1, intensity_coverage2 (float32); rows in ds1 order.
+// intensity_coverage1, intensity_coverage2, and with modified_cosine or bonanza
+// modified_intensity_coverage1, modified_intensity_coverage2 (float32); rows
+// in ds1 order.
 std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDataset& ds2,
                                                 const std::string& key1 = "SpecID",
                                                 const std::string& key2 = "SpecID",
@@ -119,7 +125,7 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
 // Score every query spectrum against every reference spectrum and keep the
 // pairs where any selected method scores >= threshold. Columns: index1
 // (query), index2 (reference), one float32 column per selected method,
-// intensity_coverage1, intensity_coverage2; rows ordered by index1, index2.
+// the coverage columns (as similarity_by_key); rows ordered by index1, index2.
 std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDataset& reference,
                                              double threshold = 0.8,
                                              const Options& options = {},

@@ -94,7 +94,8 @@ public class SimilarityTests
             Methods: SimilarityMethod.Bonanza | SimilarityMethod.Cosine | SimilarityMethod.ModifiedCosine);
         using var result = SpectrumSimilarity.LibrarySearch(ds, ds, 0.0, options);
         Assert.Equal(new[] { "index1", "index2", "cosine", "modified_cosine", "bonanza",
-            "intensity_coverage1", "intensity_coverage2", "data_index1", "data_index2" }, result.Columns);
+            "intensity_coverage1", "intensity_coverage2", "modified_intensity_coverage1",
+            "modified_intensity_coverage2", "data_index1", "data_index2" }, result.Columns);
         Assert.Equal(new[] { "cosine", "modified_cosine", "bonanza" }, result.ScoreColumns);
         Assert.Equal(25, result.Count);
         // sample.msp has a PrecursorMZ column, so the precursor methods have scores.

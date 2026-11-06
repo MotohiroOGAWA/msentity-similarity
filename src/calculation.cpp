@@ -188,6 +188,10 @@ struct Scored {
   double bonanza = kNaN;
   double coverage1 = 0.0;
   double coverage2 = 0.0;
+  // Coverages under the pairing of modified cosine and BONANZA (direct and
+  // shifted pairs); NaN unless one of them was calculated.
+  double modified_coverage1 = kNaN;
+  double modified_coverage2 = kNaN;
 
   double get(Method method) const {
     switch (method) {
@@ -307,6 +311,8 @@ Scored score_pair(const PreparedSpectrum& a, const PreparedSpectrum& b, const To
     if (shift != 0.0) collect(a, b, shift, tolerance, candidates);
     Pairing shifted = pair_peaks(a, b, candidates, bonanza);
     if (modified) result.modified_cosine = clip_unit(denominator > 0 ? shifted.dot / denominator : 0.0);
+    result.modified_coverage1 = clip_unit(a.norm > 0 ? shifted.matched_norm_a / a.norm : 0.0);
+    result.modified_coverage2 = clip_unit(b.norm > 0 ? shifted.matched_norm_b / b.norm : 0.0);
     if (bonanza) {
       double total = shifted.bonanza_dot + shifted.bonanza_unmatched;
       result.bonanza = clip_unit(total > 0 ? shifted.bonanza_dot / total : 0.0);
@@ -417,6 +423,17 @@ void add_score_columns(const std::vector<Scored>& scored, const std::vector<Meth
   }
   add("intensity_coverage1", coverage1);
   add("intensity_coverage2", coverage2);
+  // With modified cosine or BONANZA: the coverages of their pairing (which
+  // bound modified cosine).
+  if (any_precursor_method(methods)) {
+    std::vector<double> modified1, modified2;
+    for (const auto& s : scored) {
+      modified1.push_back(s.modified_coverage1);
+      modified2.push_back(s.modified_coverage2);
+    }
+    add("modified_intensity_coverage1", modified1);
+    add("modified_intensity_coverage2", modified2);
+  }
 }
 
 // Only method of options, for the single-score functions.
@@ -636,7 +653,8 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
   if (!ds1.has_column(key1)) throw KeyError("ds1 does not contain key column: " + key1);
   if (!ds2.has_column(key2)) throw KeyError("ds2 does not contain key column: " + key2);
   std::vector<std::string> reserved = {"index1", "index2", "similarity", "intensity_coverage1",
-                                       "intensity_coverage2"};
+                                       "intensity_coverage2", "modified_intensity_coverage1",
+                                       "modified_intensity_coverage2"};
   for (Method method : all_methods()) reserved.push_back(method_name(method));
   for (const auto& key : {key1, key2}) {
     if (std::find(reserved.begin(), reserved.end(), key) != reserved.end()) {
