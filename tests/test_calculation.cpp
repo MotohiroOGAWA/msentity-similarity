@@ -75,7 +75,8 @@ TEST(PrecursorMethods, ModifiedCosineAndBonanza) {
   auto table = similarity_by_key(a, b, "ID", "ID", options);
   EXPECT_EQ(internal::column_names(*table),
             (std::vector<std::string>{"ID", "index1", "index2", "cosine", "modified_cosine", "bonanza",
-                                      "intensity_coverage1", "intensity_coverage2"}));
+                                      "intensity_coverage1", "intensity_coverage2",
+                                      "modified_intensity_coverage1", "modified_intensity_coverage2"}));
   auto cosine = internal::to_values(*table->GetColumnByName("cosine"));
   auto modified = internal::to_values(*table->GetColumnByName("modified_cosine"));
   auto bonanza = internal::to_values(*table->GetColumnByName("bonanza"));
@@ -88,6 +89,37 @@ TEST(PrecursorMethods, ModifiedCosineAndBonanza) {
   EXPECT_FLOAT_EQ(std::get<double>(cosine[2]), 1.0f);
   EXPECT_TRUE(is_null(modified[2]));
   EXPECT_TRUE(is_null(bonanza[2]));
+
+  // Coverages of the modified pairing: x pairs both peaks of each side (direct
+  // coverage only 1/2); y pairs 100 only (9/10 and 1/2); z has none.
+  auto direct1 = internal::to_values(*table->GetColumnByName("intensity_coverage1"));
+  auto shifted1 = internal::to_values(*table->GetColumnByName("modified_intensity_coverage1"));
+  auto shifted2 = internal::to_values(*table->GetColumnByName("modified_intensity_coverage2"));
+  EXPECT_FLOAT_EQ(std::get<double>(direct1[0]), 0.5f);
+  EXPECT_FLOAT_EQ(std::get<double>(shifted1[0]), 1.0f);
+  EXPECT_FLOAT_EQ(std::get<double>(shifted2[0]), 1.0f);
+  EXPECT_FLOAT_EQ(std::get<double>(shifted1[1]), 0.9f);
+  EXPECT_FLOAT_EQ(std::get<double>(shifted2[1]), 0.5f);
+  EXPECT_TRUE(is_null(shifted1[2]));
+  // modified_cosine <= sqrt(c1' c2'), where cosine's own coverage would not bound it.
+  for (int row : {0, 1}) {
+    EXPECT_LE(std::get<double>(modified[row]),
+              std::sqrt(std::get<double>(shifted1[row]) * std::get<double>(shifted2[row])) + 1e-6);
+  }
+  EXPECT_GT(std::get<double>(modified[0]), std::sqrt(std::get<double>(direct1[0])));
+
+  // BONANZA alone has the same coverage columns.
+  Options bonanza_only;
+  bonanza_only.methods = {Method::Bonanza};
+  auto only = similarity_by_key(a, b, "ID", "ID", bonanza_only);
+  EXPECT_EQ(internal::column_names(*only),
+            (std::vector<std::string>{"ID", "index1", "index2", "bonanza", "intensity_coverage1",
+                                      "intensity_coverage2", "modified_intensity_coverage1",
+                                      "modified_intensity_coverage2"}));
+  EXPECT_FLOAT_EQ(std::get<double>(internal::to_values(*only->GetColumnByName("modified_intensity_coverage1"))[1]), 0.9f);
+  // Cosine alone has none.
+  Options cosine_only;
+  EXPECT_EQ(similarity_by_key(a, b, "ID", "ID", cosine_only)->num_columns(), 6);
 
   // A named precursor column must exist; pair_scores gives NaN without one.
   options.precursor_column = "Missing";

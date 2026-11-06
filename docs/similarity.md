@@ -212,8 +212,19 @@ reverse_cosine  ≤ sqrt(intensity_coverage2)
 ```
 
 The coverages come from the direct pairing (§1), the one cosine and reverse
-cosine use. Modified cosine and BONANZA pair more peaks and normalize
-differently, so no such bound holds for them.
+cosine use. Modified cosine pairs more peaks (the shifted ones too), so it can
+exceed sqrt(intensity_coverage). When modified cosine or BONANZA is
+calculated, the table also has `modified_intensity_coverage1` /
+`modified_intensity_coverage2`, the same shares under their pairing (direct and
+shifted pairs; null without a precursor m/z), and the same argument gives
+
+```text
+modified_cosine ≤ sqrt(modified_intensity_coverage1 · modified_intensity_coverage2)
+```
+
+BONANZA uses the same pairing, so these columns show how much of each spectrum
+its pairs cover, but it normalizes differently (sums instead of norms), so no
+such bound holds for it.
 
 So if spectrum 1 is a measured spectrum and spectrum 2 a prediction, a cosine
 above sqrt(intensity_coverage1) is impossible however good the predicted

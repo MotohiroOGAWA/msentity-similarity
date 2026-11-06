@@ -92,6 +92,7 @@ example.mssim
 | `cosine`, `reverse_cosine`, `modified_cosine`, `bonanza` | float32 | one column per calculated method (`parameters.methods`), in this order; the score in [0, 1], or null when the method needs a precursor m/z that a spectrum lacks ([../similarity.md](../similarity.md)) |
 | `intensity_coverage1` | float32 | share of the first / query spectrum's Σ intensity^(2·exponent) carried by its matched peaks, in [0, 1] ([../similarity.md](../similarity.md#8-intensity-coverage)) |
 | `intensity_coverage2` | float32 | the same for the second / reference spectrum |
+| `modified_intensity_coverage1`, `modified_intensity_coverage2` | float32 | with `modified_cosine` or `bonanza`: the same shares under their pairing (direct and precursor-shifted pairs); null without a precursor m/z |
 | `data_index1` | int64 | row of `matched_data/1/dataset.msds` holding spectrum `index1` (embedded mode only) |
 | `data_index2` | int64 | row of `matched_data/2/dataset.msds` holding spectrum `index2` (embedded mode only) |
 

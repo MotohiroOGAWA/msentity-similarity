@@ -117,7 +117,8 @@ class SimilarityTest {
         SimilarityDataset result = Similarity.librarySearch(ds, ds, 0.0, options)) {
       assertEquals(
           List.of("index1", "index2", "cosine", "modified_cosine", "bonanza",
-              "intensity_coverage1", "intensity_coverage2", "data_index1", "data_index2"),
+              "intensity_coverage1", "intensity_coverage2", "modified_intensity_coverage1",
+              "modified_intensity_coverage2", "data_index1", "data_index2"),
           result.columns());
       assertEquals(List.of("cosine", "modified_cosine", "bonanza"), result.scoreColumns());
       assertEquals(25, result.size());
