@@ -16,9 +16,13 @@ shared library.
 
 ## Installation
 
-Ready-made packages for Linux x64 and Windows x64 are published
-with each [GitHub Release](https://github.com/MotohiroOGAWA/msentity-similarity/releases).
-`msentity-similarity` uses one pinned, compatible `msentity` release.
+Ready-made packages for Linux x64 and Windows x64 are published with each
+[GitHub Release](https://github.com/MotohiroOGAWA/msentity-similarity/releases).
+The commands below use msentity-similarity 1.2.1, the latest release when this
+README was written. To use another version, replace the msentity-similarity version `1.2.1`
+(the newest is marked *Latest* on the [releases page](https://github.com/MotohiroOGAWA/msentity-similarity/releases/latest)).
+Each release depends on one msentity release, named in its release notes;
+for these examples, msentity 1.2.0.
 
 | Platform | Python wheel tag | Java / C# / C platform |
 |---|---|---|
@@ -27,64 +31,56 @@ with each [GitHub Release](https://github.com/MotohiroOGAWA/msentity-similarity/
 
 | Language | Install |
 |---|---|
-| C | Download `msentity-similarity-c-<version>-<platform>.zip` from the latest GitHub Release |
-| C++ | Use CMake `FetchContent` with a release tag; the compatible msentity source is fetched automatically |
-| Python | `pip install msentity-similarity --find-links https://motohiroogawa.github.io/msentity-similarity/` |
-| Java | Download both the msentity and msentity-similarity JARs from their GitHub Releases |
-| C# | Download both NuGet packages from their GitHub Releases and use the download directory as a package source |
+| C | Download `msentity-similarity-c-<version>-<platform>.zip` from the release (it includes the msentity C library) |
+| C++ | CMake `FetchContent` with the release tag; the compatible msentity source is fetched automatically |
+| Python | `pip` with the release pages of msentity-similarity and msentity as `--find-links` (below) |
+| Java | Download the msentity and msentity-similarity JARs from their releases |
+| C# | Download both NuGet packages from their releases and use the folder as a package source |
 
 ### C
 
 Download the archive for the current platform from the
-[latest release](https://github.com/MotohiroOGAWA/msentity-similarity/releases/latest).
+[release page](https://github.com/MotohiroOGAWA/msentity-similarity/releases/tag/v1.2.1).
 It contains the similarity and msentity C headers and native libraries.
 
 ### C++
-
-Replace `<tag>` with the release to use, for example `v0.1.0`:
 
 ```cmake
 include(FetchContent)
 FetchContent_Declare(msentity_similarity
   GIT_REPOSITORY https://github.com/MotohiroOGAWA/msentity-similarity.git
-  GIT_TAG <tag>)
+  GIT_TAG v1.2.1)  # msentity-similarity release
 FetchContent_MakeAvailable(msentity_similarity)
 target_link_libraries(app PRIVATE msentity::similarity)
 ```
 
 ### Python (≥ 3.10)
 
-Without a version, pip installs the latest release listed on the GitHub Pages
-wheel index. The compatible msentity wheel is installed automatically:
+Give pip both release pages: the msentity-similarity wheel and the msentity
+wheel it depends on:
 
 ```console
-pip install msentity-similarity \
-  --find-links https://motohiroogawa.github.io/msentity-similarity/
+pip install msentity-similarity==1.2.1 \
+  --find-links https://github.com/MotohiroOGAWA/msentity-similarity/releases/expanded_assets/v1.2.1 \
+  --find-links https://github.com/MotohiroOGAWA/msentity/releases/expanded_assets/v1.2.0
 ```
 
-Pin a version for reproducible environments:
-
-```console
-pip install msentity-similarity==<version> \
-  --find-links https://motohiroogawa.github.io/msentity-similarity/
-```
+The second URL is the msentity release that this similarity release depends on.
 
 ### Java (≥ 22)
 
-Download the latest msentity and similarity JARs with GitHub CLI:
+Download both JARs with GitHub CLI:
 
 ```console
 mkdir -p lib
-gh release download --repo MotohiroOGAWA/msentity \
+gh release download v1.2.0 --repo MotohiroOGAWA/msentity \
   --pattern 'msentity-*.jar' --dir lib
-gh release download --repo MotohiroOGAWA/msentity-similarity \
+gh release download v1.2.1 --repo MotohiroOGAWA/msentity-similarity \
   --pattern 'msentity-similarity-*.jar' --dir lib
 java --enable-native-access=ALL-UNNAMED -cp 'app.jar:lib/*' app.Main
 ```
 
-Pass a tag immediately after `gh release download`, such as
-`gh release download v0.1.0 ...`, to select a fixed version. The JARs contain
-the native libraries for all supported platforms.
+The JARs contain the native libraries for all supported platforms.
 
 ### C# (.NET ≥ 8)
 
@@ -92,15 +88,14 @@ Download both packages into one local source, then install similarity:
 
 ```console
 mkdir -p packages
-gh release download --repo MotohiroOGAWA/msentity \
+gh release download v1.2.0 --repo MotohiroOGAWA/msentity \
   --pattern 'MsEntity.*.nupkg' --dir packages
-gh release download --repo MotohiroOGAWA/msentity-similarity \
+gh release download v1.2.1 --repo MotohiroOGAWA/msentity-similarity \
   --pattern 'MsEntity.Similarity.*.nupkg' --dir packages
-dotnet add package MsEntity.Similarity --source ./packages
+dotnet add package MsEntity.Similarity --version 1.2.1 --source ./packages
 ```
 
-Add `--version <version>` to the final command for a fixed release. The NuGet
-packages contain native libraries under `runtimes/<rid>/native/`.
+The NuGet packages contain native libraries under `runtimes/<rid>/native/`.
 
 More details and source-build instructions: [docs/install.md](docs/install.md).
 
