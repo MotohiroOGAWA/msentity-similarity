@@ -5,8 +5,9 @@
 
     query = ms.load("query.msp")
     library = ms.load("library.msp")
-    result = mss.library_search(query, library, threshold=0.8)
-    result["similarity"]          # [0.93, 0.88, ...]
+    result = mss.library_search(query, library, threshold=0.8,
+                                methods=["cosine", "modified_cosine"])
+    result["cosine"]              # [0.93, 0.88, ...]  one column per method
     q, ref = result.match_records(0)     # the two spectra of row 0
     result.save("hits.mssim")
 
@@ -38,6 +39,7 @@ __all__ = [
     "load",
     "parse_mz_tolerance",
     "format_mz_tolerance",
+    "METHODS",
     "MsEntityError",
     "InvalidArgumentError",
     "PositionError",
@@ -48,6 +50,11 @@ __all__ = [
 ]
 
 __version__ = _n.lib.mssim_version().decode()
+
+#: Score methods, in the order of result columns. modified_cosine and bonanza
+#: also pair peaks shifted by the precursor m/z difference and need a precursor
+#: m/z (``precursor_column``, or PrecursorMZ / precursor_mz / PEPMASS / ParentMZ).
+METHODS = tuple(_n.METHODS)
 
 _ERRORS = {1: InvalidArgumentError, 2: PositionError, 3: ColumnError, 4: FormatError, 5: FileError}
 
@@ -81,12 +88,20 @@ def _dataset_bytes(dataset: "ms.Dataset | bytes") -> bytes:
     raise TypeError(f"expected msentity.Dataset or .msds bytes, got {type(dataset).__name__}")
 
 
-def _options(method: str, mz_tolerance_da: float, mz_tolerance_ppm: float,
-             intensity_exponent: float, threads: int) -> _n.Options:
-    if method not in _n.METHODS:
-        raise InvalidArgumentError(f"method must be one of {sorted(_n.METHODS)}, got {method!r}")
-    return _n.Options(_n.METHODS[method], int(threads), float(mz_tolerance_da),
-                      float(mz_tolerance_ppm), float(intensity_exponent))
+def _options(methods: str | Sequence[str], mz_tolerance_da: float, mz_tolerance_ppm: float,
+             intensity_exponent: float, threads: int,
+             precursor_column: str | None = None) -> _n.Options:
+    names = [methods] if isinstance(methods, str) else list(methods)
+    if not names:
+        raise InvalidArgumentError("methods must not be empty")
+    flags = 0
+    for name in names:
+        if name not in _n.METHODS:
+            raise InvalidArgumentError(f"method must be one of {list(_n.METHODS)}, got {name!r}")
+        flags |= _n.METHODS[name]
+    options = _n.Options(flags, int(threads), float(mz_tolerance_da), float(mz_tolerance_ppm),
+                         float(intensity_exponent), _encode(precursor_column))
+    return options
 
 
 def parse_mz_tolerance(text: str) -> dict[str, float]:
@@ -103,7 +118,7 @@ def parse_mz_tolerance(text: str) -> dict[str, float]:
 
 def format_mz_tolerance(mz_tolerance_da: float, mz_tolerance_ppm: float) -> str:
     """Canonical text of the two tolerances, e.g. ``"0.01Da,10ppm"`` (a zero term is left out)."""
-    options = _n.Options(0, 0, float(mz_tolerance_da), float(mz_tolerance_ppm), 1.0)
+    options = _n.Options(_n.METHODS["cosine"], 0, float(mz_tolerance_da), float(mz_tolerance_ppm), 1.0)
     out = ctypes.c_void_p()
     _check(_n.lib.mssim_format_mz_tolerance(ctypes.byref(options), ctypes.byref(out)))
     return _take_string(out)
@@ -128,15 +143,19 @@ def _i64_ptr(array: np.ndarray):
 def pair_scores(ds1: "ms.Dataset", index1: Sequence[int], ds2: "ms.Dataset",
                 index2: Sequence[int], *, method: str = "cosine",
                 mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 10.0,
-                intensity_exponent: float = 1.0, threads: int = 0) -> np.ndarray:
-    """Scores of ds1[index1[k]] vs ds2[index2[k]] as a float32 array."""
+                intensity_exponent: float = 1.0, precursor_column: str | None = None,
+                threads: int = 0) -> np.ndarray:
+    """Scores of ds1[index1[k]] vs ds2[index2[k]] as a float32 array (one
+    method; NaN where a precursor method lacks a precursor m/z)."""
     a, b = _dataset_bytes(ds1), _dataset_bytes(ds2)
     i1, i2 = _i64_array(index1), _i64_array(index2)
     if len(i1) != len(i2):
         raise InvalidArgumentError("index1 and index2 must have the same length")
     out = np.empty(len(i1), dtype=np.float32)
+    if not isinstance(method, str):
+        raise InvalidArgumentError("pair_scores takes one method")
     options = _options(method, mz_tolerance_da, mz_tolerance_ppm,
-                       intensity_exponent, threads)
+                       intensity_exponent, threads, precursor_column)
     _check(_n.lib.mssim_pair_scores(a, len(a), _i64_ptr(i1), b, len(b), _i64_ptr(i2), len(i1),
                                     ctypes.byref(options),
                                     out.ctypes.data_as(ctypes.POINTER(ctypes.c_float))))
@@ -145,35 +164,39 @@ def pair_scores(ds1: "ms.Dataset", index1: Sequence[int], ds2: "ms.Dataset",
 
 def all_pairs(ds1: "ms.Dataset", ds2: "ms.Dataset", *, method: str = "cosine",
               mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 10.0,
-              intensity_exponent: float = 1.0, threads: int = 0) -> np.ndarray:
+              intensity_exponent: float = 1.0, precursor_column: str | None = None,
+              threads: int = 0) -> np.ndarray:
     """len(ds1) × len(ds2) float32 score matrix."""
     a, b = _dataset_bytes(ds1), _dataset_bytes(ds2)
     n1 = len(ms.from_bytes(a)) if isinstance(ds1, (bytes, bytearray)) else len(ds1)
     n2 = len(ms.from_bytes(b)) if isinstance(ds2, (bytes, bytearray)) else len(ds2)
     out = np.empty((n1, n2), dtype=np.float32)
+    if not isinstance(method, str):
+        raise InvalidArgumentError("all_pairs takes one method")
     options = _options(method, mz_tolerance_da, mz_tolerance_ppm,
-                       intensity_exponent, threads)
+                       intensity_exponent, threads, precursor_column)
     _check(_n.lib.mssim_all_pairs(a, len(a), b, len(b), ctypes.byref(options),
                                   out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), out.size))
     return out
 
 
 def library_search(query: "ms.Dataset", reference: "ms.Dataset", threshold: float = 0.8, *,
-                   method: str = "cosine", mz_tolerance_da: float = 0.01,
+                   methods: str | Sequence[str] = "cosine", mz_tolerance_da: float = 0.01,
                    mz_tolerance_ppm: float = 10.0, intensity_exponent: float = 1.0,
-                   threads: int = 0,
+                   precursor_column: str | None = None, threads: int = 0,
                    include_matched_data: bool = True, query_source: str | None = None,
                    reference_source: str | None = None,
                    progress: Callable[[int, int], None] | None = None) -> "SimilarityDataset":
-    """All (query, reference) pairs scoring at least ``threshold``.
+    """All (query, reference) pairs where any of ``methods`` scores at least
+    ``threshold``; the table has one score column per method (see METHODS).
 
     ``progress(done, total)`` is called as pairs are scored (from worker
     threads; exceptions raised in it are printed and ignored).
     ``query_source`` / ``reference_source`` are recorded in the metadata.
     """
     a, b = _dataset_bytes(query), _dataset_bytes(reference)
-    options = _options(method, mz_tolerance_da, mz_tolerance_ppm,
-                       intensity_exponent, threads)
+    options = _options(methods, mz_tolerance_da, mz_tolerance_ppm,
+                       intensity_exponent, threads, precursor_column)
     callback = _n.ProgressFn(lambda done, total, _: progress(done, total)) if progress else \
         _n.ProgressFn()
     return _new_result(lambda out: _n.lib.mssim_library_search(
@@ -182,16 +205,18 @@ def library_search(query: "ms.Dataset", reference: "ms.Dataset", threshold: floa
 
 
 def similarity_by_key(ds1: "ms.Dataset", ds2: "ms.Dataset", key1: str = "SpecID",
-                      key2: str = "SpecID", *, method: str = "cosine",
+                      key2: str = "SpecID", *, methods: str | Sequence[str] = "cosine",
                       mz_tolerance_da: float = 0.01, mz_tolerance_ppm: float = 10.0,
-                      intensity_exponent: float = 1.0, threads: int = 0,
+                      intensity_exponent: float = 1.0, precursor_column: str | None = None,
+                      threads: int = 0,
                       include_matched_data: bool = False, source1: str | None = None,
                       source2: str | None = None) -> "SimilarityDataset":
     """Scores of the spectrum pairs whose ``key1`` / ``key2`` values are equal
-    (each key value must be unique within its dataset)."""
+    (each key value must be unique within its dataset), one score column per
+    method."""
     a, b = _dataset_bytes(ds1), _dataset_bytes(ds2)
-    options = _options(method, mz_tolerance_da, mz_tolerance_ppm,
-                       intensity_exponent, threads)
+    options = _options(methods, mz_tolerance_da, mz_tolerance_ppm,
+                       intensity_exponent, threads, precursor_column)
     return _new_result(lambda out: _n.lib.mssim_similarity_by_key(
         a, len(a), b, len(b), _encode(key1), _encode(key2), ctypes.byref(options),
         int(include_matched_data), _encode(source1), _encode(source2), out))
@@ -208,9 +233,12 @@ class SimilarityDataset:
     """A similarity result (one row per spectrum pair), as stored in .mssim.
 
     Columns: key columns (by-key results), ``index1``, ``index2`` (positions in
-    the input datasets), ``similarity`` (the score of any method; the
-    method is in ``metadata["parameters"]``), and ``data_index1`` /
-    ``data_index2`` when the matched spectra are embedded.
+    the input datasets), one score column per method (``cosine``,
+    ``reverse_cosine``, ``modified_cosine``, ``bonanza``; ``score_columns``),
+    ``intensity_coverage1`` / ``intensity_coverage2``, and ``data_index1`` /
+    ``data_index2`` when the matched spectra are embedded. Files with a single
+    ``similarity`` column (older versions) are read with it renamed to the
+    method in their metadata.
     """
 
     __slots__ = ("_handle", "_finalizer", "_matched", "__weakref__")
@@ -252,6 +280,14 @@ class SimilarityDataset:
             _check(_n.lib.mssim_column_name(self._handle, i, ctypes.byref(pointer)))
             names.append(_take_string(pointer))
         return names
+
+    @property
+    def score_columns(self) -> list[str]:
+        """The score columns, e.g. ``["cosine", "bonanza"]``."""
+        pointer = ctypes.c_void_p()
+        _check(_n.lib.mssim_score_columns(self._handle, ctypes.byref(pointer)))
+        text = _take_string(pointer)
+        return text.split(",") if text else []
 
     def column(self, name: str) -> list:
         n = len(self)
@@ -347,22 +383,24 @@ class SimilarityDataset:
             self._handle, c_names, c_orders, len(names), out))
 
     # -- statistics -------------------------------------------------------------------------
-    def describe_scores(self) -> dict[str, float]:
-        """count, mean, q1, median, q3, min, max of the score column."""
+    def describe_scores(self, column: str | None = None) -> dict[str, float]:
+        """count, mean, q1, median, q3, min, max of a score column (default:
+        the first); missing scores are left out."""
         out = (ctypes.c_double * 7)()
-        _check(_n.lib.mssim_describe_scores(self._handle, out))
+        _check(_n.lib.mssim_describe_scores(self._handle, _encode(column), out))
         keys = ("count", "mean", "q1", "median", "q3", "min", "max")
         summary: dict[str, float] = dict(zip(keys, out))
         summary["count"] = int(summary["count"])
         return summary
 
-    def histogram(self, bins: int = 20) -> tuple[np.ndarray, np.ndarray]:
-        """(counts, edges) of the scores over [0, 1]."""
+    def histogram(self, bins: int = 20,
+                  column: str | None = None) -> tuple[np.ndarray, np.ndarray]:
+        """(counts, edges) of a score column (default: the first) over [0, 1]."""
         if not 1 <= bins <= 200:
             raise InvalidArgumentError("bins must be between 1 and 200")
         counts = np.empty(bins, dtype=np.int64)
         edges = np.empty(bins + 1, dtype=np.float64)
-        _check(_n.lib.mssim_histogram(self._handle, bins, _i64_ptr(counts),
+        _check(_n.lib.mssim_histogram(self._handle, _encode(column), bins, _i64_ptr(counts),
                                       edges.ctypes.data_as(ctypes.POINTER(ctypes.c_double))))
         return counts, edges
 

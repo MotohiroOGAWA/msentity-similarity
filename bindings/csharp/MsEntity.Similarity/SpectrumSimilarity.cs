@@ -2,36 +2,62 @@ using static MsEntity.Similarity.NativeMethods;
 
 namespace MsEntity.Similarity;
 
-/// <summary>The scoring method.</summary>
+/// <summary>
+/// Scoring methods, combined with <c>|</c>. Result tables get one column per method, named
+/// <c>cosine</c>, <c>reverse_cosine</c>, <c>modified_cosine</c>, <c>bonanza</c> (in this order).
+/// </summary>
+[Flags]
 public enum SimilarityMethod
 {
     /// <summary>Tolerance-based cosine similarity.</summary>
-    Cosine = 0,
+    Cosine = 0x1,
     /// <summary>Cosine where the query norm counts only peaks matched in the reference.</summary>
-    ReverseCosine = 1,
+    ReverseCosine = 0x2,
+    /// <summary>Cosine that also pairs peaks shifted by the precursor m/z difference; needs precursors.</summary>
+    ModifiedCosine = 0x4,
+    /// <summary>Bonanza score over direct and precursor-shifted pairs; needs precursors.</summary>
+    Bonanza = 0x8,
 }
 
 /// <summary>Score settings.</summary>
-/// <param name="Method">Cosine or reverse cosine.</param>
+/// <param name="Methods">
+/// The scores to compute (at least one flag). The precursor methods give null (NaN from
+/// <see cref="SpectrumSimilarity.PairScores"/> / <see cref="SpectrumSimilarity.AllPairs"/>) when a
+/// spectrum has no precursor m/z; those two functions need exactly one method.
+/// </param>
 /// <param name="MzToleranceDa">Absolute m/z tolerance in Da; 0 disables it.</param>
 /// <param name="MzTolerancePpm">Symmetric m/z tolerance in ppm; 0 disables it.</param>
 /// <param name="IntensityExponent">Intensities are raised to this power (&gt; 0) before scoring.</param>
 /// <param name="Threads">Worker threads; 0 = all hardware threads.</param>
+/// <param name="PrecursorColumn">
+/// Precursor m/z column for the precursor methods; null or empty detects PrecursorMZ,
+/// precursor_mz, PEPMASS, or ParentMZ.
+/// </param>
 public sealed record SimilarityOptions(
-    SimilarityMethod Method = SimilarityMethod.Cosine,
+    SimilarityMethod Methods = SimilarityMethod.Cosine,
     double MzToleranceDa = 0.01,
     double MzTolerancePpm = 10.0,
     double IntensityExponent = 1.0,
-    int Threads = 0)
+    int Threads = 0,
+    string? PrecursorColumn = null)
 {
     internal NativeOptions ToNative() => new()
     {
-        Method = (int)Method,
+        Methods = (int)Methods,
         Threads = Threads,
         MzToleranceDa = MzToleranceDa,
         MzTolerancePpm = MzTolerancePpm,
         IntensityExponent = IntensityExponent,
+        PrecursorColumn = PrecursorColumn,
     };
+
+    /// <summary>A copy with the methods from comma-separated names, e.g. "cosine,bonanza".</summary>
+    public SimilarityOptions WithMethods(string text)
+    {
+        var native = ToNative();
+        Check(mssim_parse_methods(text, ref native));
+        return this with { Methods = (SimilarityMethod)native.Methods };
+    }
 
     /// <summary>
     /// A copy with both tolerances from text such as "0.01Da,10ppm" or "10ppm": &lt;value&gt;Da and/or
@@ -60,7 +86,7 @@ public sealed record SimilarityOptions(
 /// using var query = Dataset.Load("query.msp");
 /// using var library = Dataset.Load("library.msp");
 /// using var hits = SpectrumSimilarity.LibrarySearch(query, library, threshold: 0.8);
-/// hits["similarity"];
+/// hits["cosine"];
 /// hits.Save("hits.mssim");
 /// </code>
 /// </example>
@@ -104,7 +130,9 @@ public static class SpectrumSimilarity
         return output;
     }
 
-    /// <summary>All (query, reference) pairs scoring at least <paramref name="threshold"/>.</summary>
+    /// <summary>
+    /// All (query, reference) pairs where any selected method scores at least <paramref name="threshold"/>.
+    /// </summary>
     /// <param name="query">Query spectra.</param>
     /// <param name="reference">Reference (library) spectra.</param>
     /// <param name="threshold">Minimum score in [0, 1].</param>

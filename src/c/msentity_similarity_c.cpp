@@ -96,14 +96,30 @@ MSDataset dataset_from(const uint8_t* data, int64_t size, const char* what) {
   return msentity::io::msds_from_bytes(std::vector<uint8_t>(data, data + size));
 }
 
+using msentity::similarity::Method;
+
+int32_t method_flag(Method method) {
+  switch (method) {
+    case Method::Cosine: return MSSIM_METHOD_COSINE;
+    case Method::ReverseCosine: return MSSIM_METHOD_REVERSE_COSINE;
+    case Method::ModifiedCosine: return MSSIM_METHOD_MODIFIED_COSINE;
+    case Method::Bonanza: return MSSIM_METHOD_BONANZA;
+  }
+  return 0;
+}
+
 msentity::similarity::Options options_from(const mssim_options* options) {
   msentity::similarity::Options result;
   if (options == nullptr) return result;
-  require(options->method == MSSIM_METHOD_COSINE || options->method == MSSIM_METHOD_REVERSE_COSINE,
-          "method must be MSSIM_METHOD_COSINE or MSSIM_METHOD_REVERSE_COSINE");
-  result.method = options->method == MSSIM_METHOD_COSINE
-                      ? msentity::similarity::Method::Cosine
-                      : msentity::similarity::Method::ReverseCosine;
+  const int32_t all = MSSIM_METHOD_COSINE | MSSIM_METHOD_REVERSE_COSINE |
+                      MSSIM_METHOD_MODIFIED_COSINE | MSSIM_METHOD_BONANZA;
+  require(options->methods != 0 && (options->methods & ~all) == 0,
+          "methods must combine MSSIM_METHOD_COSINE, _REVERSE_COSINE, _MODIFIED_COSINE, _BONANZA");
+  result.methods.clear();
+  for (Method method : msentity::similarity::all_methods()) {
+    if (options->methods & method_flag(method)) result.methods.push_back(method);
+  }
+  result.precursor_column = text(options->precursor_column);
   result.threads = options->threads;
   result.mz_tolerance_da = options->mz_tolerance_da;
   result.mz_tolerance_ppm = options->mz_tolerance_ppm;
@@ -158,11 +174,21 @@ void mssim_values_clear(msentity_value* values, int64_t n) {
 void mssim_default_options(mssim_options* options) {
   if (options == nullptr) return;
   msentity::similarity::Options defaults;
-  options->method = MSSIM_METHOD_COSINE;
+  options->methods = MSSIM_METHOD_COSINE;
+  options->precursor_column = nullptr;
   options->threads = defaults.threads;
   options->mz_tolerance_da = defaults.mz_tolerance_da;
   options->mz_tolerance_ppm = defaults.mz_tolerance_ppm;
   options->intensity_exponent = defaults.intensity_exponent;
+}
+
+int32_t mssim_parse_methods(const char* text, mssim_options* options) {
+  return guarded([&] {
+    require(text != nullptr && options != nullptr, "text or options is NULL");
+    int32_t flags = 0;
+    for (Method method : msentity::similarity::parse_methods(text)) flags |= method_flag(method);
+    options->methods = flags;
+  });
 }
 
 int32_t mssim_parse_mz_tolerance(const char* text, mssim_options* options) {
@@ -393,19 +419,29 @@ int32_t mssim_sort_by(const mssim_result* result, const char* const* columns,
   });
 }
 
-int32_t mssim_describe_scores(const mssim_result* result, double* out) {
+int32_t mssim_score_columns(const mssim_result* result, char** out) {
+  return guarded([&] {
+    require(out != nullptr, "output pointer is NULL");
+    std::string joined;
+    for (const auto& name : get(result).score_columns()) joined += (joined.empty() ? "" : ",") + name;
+    *out = duplicate(joined);
+  });
+}
+
+int32_t mssim_describe_scores(const mssim_result* result, const char* column, double* out) {
   return guarded([&] {
     require(out != nullptr, "output is NULL");
-    auto s = get(result).describe_scores();
+    auto s = get(result).describe_scores(text(column));
     double values[7] = {static_cast<double>(s.count), s.mean, s.q1, s.median, s.q3, s.min, s.max};
     std::copy(values, values + 7, out);
   });
 }
 
-int32_t mssim_histogram(const mssim_result* result, int32_t bins, int64_t* counts, double* edges) {
+int32_t mssim_histogram(const mssim_result* result, const char* column, int32_t bins,
+                        int64_t* counts, double* edges) {
   return guarded([&] {
     require(counts != nullptr && edges != nullptr, "output is NULL");
-    auto h = get(result).histogram(bins);
+    auto h = get(result).histogram(bins, text(column));
     std::copy(h.counts.begin(), h.counts.end(), counts);
     std::copy(h.edges.begin(), h.edges.end(), edges);
   });

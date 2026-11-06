@@ -29,8 +29,10 @@ ds = ms.load("example.msp")
 mss.pair_scores(ds, [0, 1], ds, [1, 0])          # array([0.75971437, 0.75971437])
 mss.all_pairs(ds, ds, method="reverse_cosine")   # array([[1.        , 0.78809655],
                                                  #        [0.75971437, 1.        ]])
-# keyword options: method="cosine"|"reverse_cosine", mz_tolerance_da=0.01,
-#                  mz_tolerance_ppm=10.0, intensity_exponent=1.0, threads=0
+# keyword options: method= one of mss.METHODS ("cosine", "reverse_cosine",
+#                  "modified_cosine", "bonanza"), mz_tolerance_da=0.01,
+#                  mz_tolerance_ppm=10.0, intensity_exponent=1.0,
+#                  precursor_column=None (detect PrecursorMZ, …), threads=0
 mss.all_pairs(ds, ds, mz_tolerance_da=0, mz_tolerance_ppm=10)        # ppm only
 mss.all_pairs(ds, ds, **mss.parse_mz_tolerance("10ppm"))             # the same, from text
 mss.parse_mz_tolerance("0.01da,10PPM")   # {'mz_tolerance_da': 0.01, 'mz_tolerance_ppm': 10.0}
@@ -41,20 +43,26 @@ hits = mss.library_search(ds, ds, 0.7,
                           query_source="example.msp",          # recorded in the metadata
                           progress=lambda done, total: None)    # optional
 len(hits)                       # 4
-hits.columns                    # ['index1', 'index2', 'similarity', 'data_index1', 'data_index2']
-hits["similarity"]       # [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
-hits.metadata["parameters"]     # {'threshold': 0.7, 'method': 'cosine', 'mz_tolerance_da': 0.01,
-                                #  'mz_tolerance_ppm': 10.0, 'intensity_exponent': 1.0}
+hits.columns                    # ['index1', 'index2', 'cosine', 'intensity_coverage1',
+                                #  'intensity_coverage2', 'data_index1', 'data_index2']
+hits["cosine"]                  # [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
+hits.metadata["parameters"]     # {'threshold': 0.7, 'methods': ['cosine'], 'mz_tolerance_da': 0.01,
+                                #  'mz_tolerance_ppm': 10.0, 'intensity_exponent': 1.0,
+                                #  'precursor_column': ''}
+# Several methods: one column each; a pair is kept when any reaches the threshold.
+multi = mss.library_search(ds, ds, 0.7, methods=["cosine", "bonanza"])
+multi.score_columns             # ['cosine', 'bonanza']
+multi["bonanza"]                # [1.0, 0.9351232051849365, 0.9351232051849365, 1.0]
 query, ref = hits.match_records(1)   # msentity.Record of each side
 query["Name"], ref["Name"]           # ('MassSpecID0000001', 'MassSpecID0000002')
 ref.mz                               # array([ 91.0542, 125.0233, 246.1125])
 
 # Filter, sort, statistics
 different = hits.filter([a != b for a, b in zip(hits["index1"], hits["index2"])])
-best = different.sort_by("similarity", ascending=False)
-hits.describe_scores()          # {'count': 4, 'mean': 0.879857…, 'q1': 0.759714…,
+best = different.sort_by("cosine", ascending=False)
+hits.describe_scores()          # first score column, or describe_scores("bonanza"); {'count': 4, 'mean': 0.879857…, 'q1': 0.759714…,
                                 #  'median': 0.879857…, 'q3': 1.0, 'min': 0.759714…, 'max': 1.0}
-hits.histogram(5)               # (array([0, 0, 0, 2, 2]), array([0. , 0.2, 0.4, 0.6, 0.8, 1. ]))
+hits.histogram(5)               # (column="bonanza" for another score) (array([0, 0, 0, 2, 2]), array([0. , 0.2, 0.4, 0.6, 0.8, 1. ]))
 hits.to_pandas()                # DataFrame (needs pyarrow + pandas); to_arrow() for pyarrow
 
 # Files
@@ -68,9 +76,9 @@ hits.export("hits.csv")         # table only: .csv, .tsv, .parquet
 ds.set_spec_id("SpecID", "SP")
 pairs = mss.similarity_by_key(ds, ds[[1, 0]], "SpecID", "SpecID")
 pairs.to_pandas()
-#   SpecID  index1  index2  similarity
-# 0    SP1       0       1         1.0
-# 1    SP2       1       0         1.0
+#   SpecID  index1  index2  cosine  intensity_coverage1  intensity_coverage2
+# 0    SP1       0       1     1.0                  1.0                  1.0
+# 1    SP2       1       0     1.0                  1.0                  1.0
 ```
 
 Errors are msentity's exception classes (`mss.InvalidArgumentError` is
@@ -90,8 +98,12 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
   Similarity.pairScores(ds, new long[] {0, 1}, ds, new long[] {1, 0});
   // [0.75971437, 0.75971437]
   float[][] matrix = Similarity.allPairs(ds, ds,
-      Options.defaults().withMethod(Options.Method.REVERSE_COSINE));
+      Options.defaults().withMethods(Options.Method.REVERSE_COSINE));
   // [[1.0, 0.78809655], [0.75971437, 1.0]]
+  // Methods: COSINE (default), REVERSE_COSINE, MODIFIED_COSINE, BONANZA (the last two need a
+  // precursor m/z; withPrecursorColumn("…"), else PrecursorMZ/precursor_mz/PEPMASS/ParentMZ).
+  // pairScores / allPairs take exactly one; searches take several (one column each).
+  Options.defaults().withMethods("cosine,bonanza");   // also from text
   // Defaults: within 0.01 Da or 10 ppm. From text (a unit left out becomes 0):
   Similarity.allPairs(ds, ds, Options.defaults().withMzTolerance("10ppm"));   // ppm only
   Options.defaults().formatMzTolerance();   // "0.01Da,10ppm"
@@ -102,8 +114,10 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
            "example.msp", "example.msp",    // sources for the metadata
            (done, total) -> {})) {          // progress, may be null
     hits.size();                            // 4
-    hits.columns();      // [index1, index2, similarity, data_index1, data_index2]
-    hits.column("similarity");       // [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
+    hits.columns();      // [index1, index2, cosine, intensity_coverage1,
+                         //  intensity_coverage2, data_index1, data_index2]
+    hits.scoreColumns();                    // [cosine]
+    hits.column("cosine");           // [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
     hits.metadataJson();                    // {"created_at":"…","mode":"library_search",…}
 
     try (SimilarityDataset.Match m = hits.matchRecords(1)) {   // one-spectrum Datasets
@@ -111,7 +125,7 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
       m.second().value(0, "Name");          // MassSpecID0000002
     }
 
-    try (SimilarityDataset best = hits.sortBy("similarity", false)) {
+    try (SimilarityDataset best = hits.sortBy("cosine", false)) {
       best.save(Path.of("best.mssim"));
     }
     hits.describeScores();   // ScoreSummary[count=4, mean=0.8798…, q1=0.7597…, median=0.8798…, …]
@@ -119,10 +133,20 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
     hits.exportTable(Path.of("hits.tsv"));
   }
 
+  // Several methods: a pair is kept when any of them reaches the threshold.
+  try (SimilarityDataset hits = Similarity.librarySearch(ds, ds, 0.7,
+           Options.defaults().withMethods(Options.Method.COSINE, Options.Method.BONANZA))) {
+    hits.scoreColumns();                    // [cosine, bonanza]
+    hits.column("bonanza");          // [1.0, 0.9351232051849365, 0.9351232051849365, 1.0]
+    hits.describeScores("bonanza");         // of one score column (null = the first)
+    hits.histogram("bonanza", 5);
+  }
+
   ds.setSpecId("SpecID", "SP", false, 1);
   try (Dataset other = ds.select(1, 0);
        SimilarityDataset pairs = Similarity.similarityByKey(ds, other)) {  // key "SpecID"
-    pairs.columns();         // [SpecID, index1, index2, similarity]
+    pairs.columns();         // [SpecID, index1, index2, cosine, intensity_coverage1,
+                             //  intensity_coverage2]
   }
 }
 SimilarityDataset loaded = SimilarityDataset.load(Path.of("best.mssim"));
@@ -147,8 +171,12 @@ using var ds = Dataset.Load("example.msp");
 SpectrumSimilarity.PairScores(ds, new long[] { 0, 1 }, ds, new long[] { 1, 0 });
 // { 0.75971437, 0.75971437 }
 float[,] matrix = SpectrumSimilarity.AllPairs(ds, ds,
-    new SimilarityOptions(Method: SimilarityMethod.ReverseCosine));
+    new SimilarityOptions(Methods: SimilarityMethod.ReverseCosine));
 // { { 1, 0.78809655 }, { 0.75971437, 1 } }
+// Methods ([Flags]): Cosine (default), ReverseCosine, ModifiedCosine, Bonanza (the last two need a
+// precursor m/z; PrecursorColumn: "…", else PrecursorMZ/precursor_mz/PEPMASS/ParentMZ).
+// PairScores / AllPairs take exactly one; searches take several (one column each).
+new SimilarityOptions().WithMethods("cosine,bonanza");   // also from text
 // Defaults: within 0.01 Da or 10 ppm. From text (a unit left out becomes 0):
 SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions().WithMzTolerance("10ppm"));   // ppm only
 new SimilarityOptions().FormatMzTolerance();   // "0.01Da,10ppm"
@@ -156,24 +184,35 @@ new SimilarityOptions().FormatMzTolerance();   // "0.01Da,10ppm"
 using var hits = SpectrumSimilarity.LibrarySearch(ds, ds, threshold: 0.7,
     querySource: "example.msp", progress: (done, total) => { });
 hits.Count;                          // 4
-hits.Columns;                        // index1, index2, similarity, data_index1, data_index2
-hits["similarity"];           // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
+hits.Columns;                        // index1, index2, cosine, intensity_coverage1,
+                                     // intensity_coverage2, data_index1, data_index2
+hits.ScoreColumns;                   // cosine
+hits["cosine"];               // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
 hits.MetadataJson;                   // {"created_at":"…","mode":"library_search",…}
 
 var (query, reference) = hits.MatchRecords(1);    // one-spectrum Datasets (dispose them)
 query.GetValue(0, "Name");           // MassSpecID0000001
 reference.GetValue(0, "Name");       // MassSpecID0000002
 
-using var best = hits.SortBy("similarity", ascending: false);
+using var best = hits.SortBy("cosine", ascending: false);
 best.Save("best.mssim");
 hits.DescribeScores();               // ScoreSummary { Count = 4, Mean = 0.8798…, … }
 hits.Histogram(5).Counts;            // { 0, 0, 0, 2, 2 }
 hits.ExportTable("hits.csv");
 
+// Several methods: a pair is kept when any of them reaches the threshold.
+using var multi = SpectrumSimilarity.LibrarySearch(ds, ds, threshold: 0.7,
+    options: new SimilarityOptions(Methods: SimilarityMethod.Cosine | SimilarityMethod.Bonanza));
+multi.ScoreColumns;                  // cosine, bonanza
+multi["bonanza"];             // 1.0, 0.9351232051849365, 0.9351232051849365, 1.0
+multi.DescribeScores("bonanza");     // of one score column (null = the first)
+multi.Histogram(5, column: "bonanza");
+
 ds.SetSpecId("SpecID", "SP");
 using var other = ds.Select(1, 0);
 using var pairs = SpectrumSimilarity.SimilarityByKey(ds, other);   // key "SpecID"
-pairs.Columns;                       // SpecID, index1, index2, similarity
+pairs.Columns;                       // SpecID, index1, index2, cosine, intensity_coverage1,
+                                     // intensity_coverage2
 
 using var loaded = SimilarityDataset.Load("best.mssim");
 loaded.SourceIndices(1);             // { 0, 1 }
@@ -204,6 +243,8 @@ msentity_to_msds_bytes(ds, &bytes, &size);       /* the dataset as .msds bytes *
 
 mssim_options options;
 mssim_default_options(&options);                 /* cosine, 0.01 Da, 10 ppm, 1.0, all threads */
+/* options.methods = MSSIM_METHOD_COSINE | MSSIM_METHOD_BONANZA;  several score columns
+   (or mssim_parse_methods("cosine,bonanza", &options)); all_pairs needs exactly one */
 mssim_parse_mz_tolerance("10ppm", &options);     /* optional: tolerances from text (here ppm only) */
 float matrix[4];
 mssim_all_pairs(bytes, size, bytes, size, &options, matrix, 4);
@@ -219,7 +260,7 @@ if (mssim_library_search(bytes, size, bytes, size, 0.7, &options,
 }
 mssim_size(hits);                                /* 4 */
 msentity_value scores[4];
-mssim_get_column(hits, "similarity", scores, 4);   /* scores[1].float_value = 0.7597… */
+mssim_get_column(hits, "cosine", scores, 4);     /* scores[1].float_value = 0.7597… */
 mssim_values_clear(scores, 4);
 mssim_save(hits, "hits.mssim");
 

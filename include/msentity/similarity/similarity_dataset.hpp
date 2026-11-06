@@ -13,7 +13,8 @@
 
 namespace msentity::similarity {
 
-// Summary of the similarity column (NaN when there are no rows).
+// Summary of a score column, over its non-missing values (NaN when there
+// are none).
 struct ScoreSummary {
   int64_t count = 0;
   double mean = 0, q1 = 0, median = 0, q3 = 0, min = 0, max = 0;
@@ -30,8 +31,9 @@ struct Histogram {
 // the content of an .mssim file (docs/format/mssim.md).
 //
 // Invariants (checked by every constructor):
-//   * the table has index1, index2, and a numeric similarity column
-//     whose values are finite and within [0, 1];
+//   * the table has index1, index2, and at least one score column, named by
+//     a method (cosine, reverse_cosine, modified_cosine, bonanza), numeric,
+//     with values that are missing (null) or finite and within [0, 1];
 //   * metadata_json is a JSON object;
 //   * with matched data: data_index1/data_index2 columns refer to rows of the
 //     matched datasets, and the source indices have one entry per row.
@@ -40,6 +42,9 @@ class SimilarityDataset {
   using DatasetPair = std::pair<MSDataset, MSDataset>;
   using IndexPair = std::pair<std::vector<int64_t>, std::vector<int64_t>>;
 
+  // A table from before score columns were named by method (a single
+  // `similarity` column) is read with that column renamed to the method in
+  // metadata parameters.method (cosine when absent).
   explicit SimilarityDataset(std::shared_ptr<arrow::Table> table,
                              std::string metadata_json = "{}",
                              std::optional<DatasetPair> matched_datasets = std::nullopt,
@@ -56,6 +61,8 @@ class SimilarityDataset {
   int64_t size() const;
   const std::shared_ptr<arrow::Table>& table() const { return table_; }
   std::vector<std::string> columns() const;
+  // The score columns, in the order of all_methods().
+  std::vector<std::string> score_columns() const;
   std::vector<Value> column_values(const std::string& name) const;
   const std::string& metadata_json() const { return metadata_json_; }
   void set_metadata_json(std::string json);
@@ -72,8 +79,10 @@ class SimilarityDataset {
   // Stable sort by one or more columns; missing values last.
   SimilarityDataset sort_by(const std::vector<std::string>& columns,
                             const std::vector<bool>& ascending = {}) const;
-  ScoreSummary describe_scores() const;
-  Histogram histogram(int bins = 20) const;
+  // Of a score column ("" = the first of score_columns()); missing values
+  // are left out.
+  ScoreSummary describe_scores(const std::string& column = "") const;
+  Histogram histogram(int bins = 20, const std::string& column = "") const;
   // Write the table as .parquet, .csv, or .tsv (by extension).
   void export_table(const std::string& path) const;
 

@@ -7,7 +7,7 @@ shared library.
 
 | | |
 |---|---|
-| Scores | cosine and reverse cosine with one-to-one peak matching within an m/z tolerance in Da and/or ppm (intensity exponent), multithreaded |
+| Scores | cosine, reverse cosine, modified cosine, and BONANZA (one column each, several at once) with one-to-one peak matching within an m/z tolerance in Da and/or ppm (intensity exponent), multithreaded; per-side intensity coverage (upper bound of the cosine) |
 | Modes | chosen pairs, all-pairs matrix, library search with threshold, pairs by metadata key |
 | Results | `SimilarityDataset`: Arrow table + calculation metadata + optionally the compared spectra; filter, sort, statistics |
 | Format | `.mssim` (HDF5 + Parquet + embedded `.msds`) — [specification](docs/format/mssim.md) |
@@ -111,13 +111,13 @@ import msentity as ms
 import msentity_similarity as mss
 
 ds = ms.load("example.msp")                       # 2 spectra
-hits = mss.library_search(ds, ds, threshold=0.7)
+hits = mss.library_search(ds, ds, threshold=0.7)   # methods="cosine" by default
 hits.to_pandas()
-#    index1  index2  similarity  data_index1  data_index2
-# 0       0       0    1.000000            0            0
-# 1       0       1    0.759714            0            1
-# 2       1       0    0.759714            1            0
-# 3       1       1    1.000000            1            1
+#    index1  index2  cosine      intensity_coverage1  intensity_coverage2  data_index1  data_index2
+# 0       0       0    1.000000             1.000000             1.000000            0            0
+# 1       0       1    0.759714             0.929270             1.000000            0            1
+# 2       1       0    0.759714             1.000000             0.929270            1            0
+# 3       1       1    1.000000             1.000000             1.000000            1            1
 query, reference = hits.match_records(1)          # the two compared spectra
 hits.save("hits.mssim")
 ```

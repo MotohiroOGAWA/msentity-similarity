@@ -40,7 +40,8 @@ TEST(CApi, AllPairsAndPairScores) {
   auto bytes = sample_bytes();
   mssim_options options;
   mssim_default_options(&options);
-  EXPECT_EQ(options.method, MSSIM_METHOD_COSINE);
+  EXPECT_EQ(options.methods, MSSIM_METHOD_COSINE);
+  EXPECT_EQ(options.precursor_column, nullptr);
   EXPECT_DOUBLE_EQ(options.mz_tolerance_da, 0.01);
   EXPECT_DOUBLE_EQ(options.mz_tolerance_ppm, 10.0);
   char* tolerance = nullptr;
@@ -67,17 +68,24 @@ TEST(CApi, AllPairsAndPairScores) {
 
   int64_t index1[] = {0, 2}, index2[] = {1, 4};
   float scores[2];
-  options.method = MSSIM_METHOD_REVERSE_COSINE;
+  options.methods = MSSIM_METHOD_REVERSE_COSINE;
   ASSERT_EQ(mssim_pair_scores(bytes.data(), bytes.size(), index1, bytes.data(), bytes.size(),
                               index2, 2, &options, scores),
             MSENTITY_OK);
   EXPECT_NEAR(scores[0], 0.7586880922317505f, 1e-6);
   EXPECT_NEAR(scores[1], 0.31010058522224426f, 1e-6);
 
-  options.method = 7;
+  options.methods = 0x10;  // unknown flag
   EXPECT_EQ(mssim_pair_scores(bytes.data(), bytes.size(), index1, bytes.data(), bytes.size(),
                               index2, 2, &options, scores),
             MSENTITY_ERR_INVALID_ARGUMENT);
+  options.methods = MSSIM_METHOD_COSINE | MSSIM_METHOD_BONANZA;  // one method only here
+  EXPECT_EQ(mssim_pair_scores(bytes.data(), bytes.size(), index1, bytes.data(), bytes.size(),
+                              index2, 2, &options, scores),
+            MSENTITY_ERR_INVALID_ARGUMENT);
+  ASSERT_EQ(mssim_parse_methods("bonanza, modified_cosine", &options), MSENTITY_OK);
+  EXPECT_EQ(options.methods, MSSIM_METHOD_BONANZA | MSSIM_METHOD_MODIFIED_COSINE);
+  EXPECT_EQ(mssim_parse_methods("dot", &options), MSENTITY_ERR_INVALID_ARGUMENT);
   index1[0] = 9;
   EXPECT_EQ(mssim_pair_scores(bytes.data(), bytes.size(), index1, bytes.data(), bytes.size(),
                               index2, 2, nullptr, scores),
@@ -107,12 +115,15 @@ TEST(CApi, LibrarySearchResult) {
   EXPECT_EQ(progress[0], 25);
   EXPECT_EQ(progress[1], 25);
   EXPECT_EQ(mssim_size(result.handle), 9);
-  ASSERT_EQ(mssim_n_columns(result.handle), 5);
+  ASSERT_EQ(mssim_n_columns(result.handle), 7);
   char* name = nullptr;
   ASSERT_EQ(mssim_column_name(result.handle, 2, &name), MSENTITY_OK);
-  EXPECT_STREQ(name, "similarity");
+  EXPECT_STREQ(name, "cosine");
   mssim_string_free(name);
-  EXPECT_EQ(mssim_column_name(result.handle, 5, &name), MSENTITY_ERR_OUT_OF_RANGE);
+  ASSERT_EQ(mssim_column_name(result.handle, 3, &name), MSENTITY_OK);
+  EXPECT_STREQ(name, "intensity_coverage1");
+  mssim_string_free(name);
+  EXPECT_EQ(mssim_column_name(result.handle, 7, &name), MSENTITY_ERR_OUT_OF_RANGE);
   EXPECT_EQ(int_column(result.handle, "index2"), (std::vector<int64_t>{0, 1, 4, 2, 3, 2, 3, 1, 4}));
   msentity_value cell[9];
   EXPECT_EQ(mssim_get_column(result.handle, "missing", cell, 9), MSENTITY_ERR_KEY);
@@ -153,7 +164,7 @@ TEST(CApi, LibrarySearchResult) {
   for (auto v : index1) mask.push_back(v == 1 ? 1 : 0);
   Result filtered, sorted, loaded;
   ASSERT_EQ(mssim_filter(result.handle, mask.data(), mask.size(), &filtered.handle), MSENTITY_OK);
-  const char* columns[] = {"similarity"};
+  const char* columns[] = {"cosine"};
   int32_t ascending[] = {1};
   ASSERT_EQ(mssim_sort_by(filtered.handle, columns, ascending, 1, &sorted.handle), MSENTITY_OK);
   EXPECT_EQ(int_column(sorted.handle, "index2"), (std::vector<int64_t>{4, 1}));
@@ -165,11 +176,16 @@ TEST(CApi, LibrarySearchResult) {
   EXPECT_EQ(mssim_matched_size(loaded.handle, 2), 2);
 
   double summary[7];
-  ASSERT_EQ(mssim_describe_scores(loaded.handle, summary), MSENTITY_OK);
+  ASSERT_EQ(mssim_describe_scores(loaded.handle, nullptr, summary), MSENTITY_OK);
+  EXPECT_EQ(mssim_describe_scores(loaded.handle, "bonanza", summary), MSENTITY_ERR_KEY);
+  char* score_columns = nullptr;
+  ASSERT_EQ(mssim_score_columns(loaded.handle, &score_columns), MSENTITY_OK);
+  EXPECT_STREQ(score_columns, "cosine");
+  mssim_string_free(score_columns);
   EXPECT_EQ(summary[0], 2);
   int64_t counts[4];
   double edges[5];
-  ASSERT_EQ(mssim_histogram(loaded.handle, 4, counts, edges), MSENTITY_OK);
+  ASSERT_EQ(mssim_histogram(loaded.handle, "cosine", 4, counts, edges), MSENTITY_OK);
   EXPECT_EQ(counts[3], 2);
   EXPECT_DOUBLE_EQ(edges[4], 1.0);
 

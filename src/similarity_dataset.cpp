@@ -1,5 +1,7 @@
 #include "msentity/similarity/similarity_dataset.hpp"
 
+#include "msentity/similarity/calculation.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -47,10 +49,10 @@ std::vector<int64_t> int_column(const arrow::Table& table, const std::string& na
   return values;
 }
 
-std::vector<double> score_values(const arrow::Table& table) {
+// Values of a score column; missing values are NaN.
+std::vector<double> score_values(const arrow::Table& table, const std::string& column) {
   std::vector<double> scores;
-  for (const auto& value : internal::to_values(
-           *table.column(column_index(table, "similarity")))) {
+  for (const auto& value : internal::to_values(*table.column(column_index(table, column)))) {
     double score = kNaN;
     if (const auto* d = std::get_if<double>(&value)) score = *d;
     if (const auto* i = std::get_if<int64_t>(&value)) score = static_cast<double>(*i);
@@ -60,12 +62,54 @@ std::vector<double> score_values(const arrow::Table& table) {
   return scores;
 }
 
+// Non-missing values of a score column.
+std::vector<double> present_scores(const arrow::Table& table, const std::string& column) {
+  std::vector<double> scores;
+  for (double score : score_values(table, column)) {
+    if (!std::isnan(score)) scores.push_back(score);
+  }
+  return scores;
+}
+
+std::vector<std::string> score_column_names(const arrow::Table& table) {
+  std::vector<std::string> names;
+  for (Method method : all_methods()) {
+    if (column_index(table, method_name(method)) >= 0) names.push_back(method_name(method));
+  }
+  return names;
+}
+
 nlohmann::ordered_json parse_object(const std::string& text) {
   auto json = nlohmann::ordered_json::parse(text, nullptr, false);
   if (json.is_discarded() || !json.is_object()) {
     throw std::invalid_argument("metadata must be a JSON object");
   }
   return json;
+}
+
+// A legacy table (one `similarity` column, no method columns): the column
+// renamed to the method of the metadata, which gets parameters.methods.
+void upgrade_legacy(std::shared_ptr<arrow::Table>& table, std::string& metadata_json) {
+  if (!table || column_index(*table, "similarity") < 0 || !score_column_names(*table).empty()) return;
+  auto json = nlohmann::ordered_json::parse(metadata_json, nullptr, false);
+  std::string method = "cosine";
+  if (json.is_object() && json.contains("parameters") && json["parameters"].is_object()) {
+    auto& parameters = json["parameters"];
+    if (parameters.contains("method") && parameters["method"].is_string()) {
+      try {
+        method = method_name(parse_method(parameters["method"].get<std::string>()));
+      } catch (const std::invalid_argument&) {
+        // keep cosine
+      }
+    }
+    parameters["methods"] = nlohmann::ordered_json::array({method});
+    metadata_json = json.dump();
+  }
+  auto names = internal::column_names(*table);
+  for (auto& name : names) {
+    if (name == "similarity") name = method;
+  }
+  table = unwrap(table->RenameColumns(names));
 }
 
 std::shared_ptr<arrow::Array> int64_array(const std::vector<int64_t>& values) {
@@ -124,6 +168,7 @@ SimilarityDataset::SimilarityDataset(std::shared_ptr<arrow::Table> table, std::s
       metadata_json_(std::move(metadata_json)),
       matched_datasets_(std::move(matched_datasets)),
       source_indices_(std::move(matched_source_indices)) {
+  upgrade_legacy(table_, metadata_json_);
   validate();
 }
 
@@ -131,7 +176,7 @@ void SimilarityDataset::validate() const {
   if (!table_) throw std::invalid_argument("table must not be null");
   parse_object(metadata_json_);
   std::vector<std::string> missing_columns;
-  for (const char* column : {"similarity", "index1", "index2"}) {
+  for (const char* column : {"index1", "index2"}) {
     if (column_index(*table_, column) < 0) missing_columns.push_back(column);
   }
   if (!missing_columns.empty()) {
@@ -139,13 +184,21 @@ void SimilarityDataset::validate() const {
     for (const auto& m : missing_columns) list += (list.empty() ? "'" : ", '") + m + "'";
     throw std::invalid_argument("Similarity table is missing required columns: [" + list + "]");
   }
-  auto type = table_->column(column_index(*table_, "similarity"))->type()->id();
-  if (!(arrow::is_integer(type) || arrow::is_floating(type) || type == arrow::Type::BOOL)) {
-    throw std::invalid_argument("Similarity scores must be numeric");
+  auto scores = score_column_names(*table_);
+  if (scores.empty()) {
+    throw std::invalid_argument(
+        "Similarity table needs a score column: cosine, reverse_cosine, modified_cosine, or bonanza");
   }
-  for (double score : score_values(*table_)) {
-    if (!std::isfinite(score) || score < 0 || score > 1) {
-      throw std::invalid_argument("Similarity scores must be finite values between 0 and 1");
+  for (const auto& column : scores) {
+    auto type = table_->column(column_index(*table_, column))->type()->id();
+    if (!(arrow::is_integer(type) || arrow::is_floating(type) || type == arrow::Type::BOOL)) {
+      throw std::invalid_argument("Similarity scores must be numeric: " + column);
+    }
+    for (double score : present_scores(*table_, column)) {
+      if (!std::isfinite(score) || score < 0 || score > 1) {
+        throw std::invalid_argument("Similarity scores must be missing or finite values between 0 and 1: " +
+                                    column);
+      }
     }
   }
   if (matched_datasets_.has_value() != source_indices_.has_value()) {
@@ -205,6 +258,23 @@ int64_t SimilarityDataset::size() const { return table_->num_rows(); }
 std::vector<std::string> SimilarityDataset::columns() const {
   return internal::column_names(*table_);
 }
+
+std::vector<std::string> SimilarityDataset::score_columns() const {
+  return score_column_names(*table_);
+}
+
+namespace {
+
+std::string score_column(const SimilarityDataset& result, const std::string& column) {
+  auto names = result.score_columns();
+  if (column.empty()) return names.front();
+  if (std::find(names.begin(), names.end(), column) == names.end()) {
+    throw KeyError("not a score column: " + column);
+  }
+  return column;
+}
+
+}  // namespace
 
 std::vector<Value> SimilarityDataset::column_values(const std::string& name) const {
   int index = column_index(*table_, name);
@@ -270,8 +340,8 @@ SimilarityDataset SimilarityDataset::sort_by(const std::vector<std::string>& col
                            source_indices_);
 }
 
-ScoreSummary SimilarityDataset::describe_scores() const {
-  std::vector<double> scores = score_values(*table_);
+ScoreSummary SimilarityDataset::describe_scores(const std::string& column) const {
+  std::vector<double> scores = present_scores(*table_, score_column(*this, column));
   ScoreSummary summary;
   summary.count = static_cast<int64_t>(scores.size());
   if (scores.empty()) {
@@ -288,12 +358,13 @@ ScoreSummary SimilarityDataset::describe_scores() const {
   return summary;
 }
 
-Histogram SimilarityDataset::histogram(int bins) const {
+Histogram SimilarityDataset::histogram(int bins, const std::string& column) const {
   if (bins < 1 || bins > 200) throw std::invalid_argument("bins must be an integer between 1 and 200");
+  const std::string name = score_column(*this, column);
   Histogram result;
   result.counts.assign(static_cast<std::size_t>(bins), 0);
   for (int i = 0; i <= bins; ++i) result.edges.push_back(static_cast<double>(i) / bins);
-  for (double score : score_values(*table_)) {
+  for (double score : present_scores(*table_, name)) {
     auto bin = static_cast<int>(std::floor(score * bins));
     bin = std::clamp(bin, 0, bins - 1);  // 1.0 belongs to the last bin
     ++result.counts[static_cast<std::size_t>(bin)];
@@ -341,7 +412,7 @@ SimilarityDataset SimilarityDataset::load(const std::string& path) {
     throw FormatError("Not an msentity similarity file: " + path);
   }
   int64_t version = h5::read_int_attribute(file.id(), "schema_version").value_or(0);
-  if (version != 1 && version != 2) throw FormatError("Unsupported similarity schema version");
+  if (version < 1 || version > 3) throw FormatError("Unsupported similarity schema version");
 
   auto payload = h5::read_bytes_dataset(file.id(), "table.parquet");
   auto table = internal::parquet_to_table(payload.data(), payload.size());
@@ -350,7 +421,7 @@ SimilarityDataset SimilarityDataset::load(const std::string& path) {
 
   std::optional<DatasetPair> datasets;
   std::optional<IndexPair> sources;
-  if (version == 2 && h5::link_exists(file.id(), "matched_data")) {
+  if (version >= 2 && h5::link_exists(file.id(), "matched_data")) {
     h5::Handle embedded = h5::open_group(file.id(), "matched_data");
     std::vector<MSDataset> loaded;
     std::vector<std::vector<int64_t>> indices;
@@ -405,7 +476,7 @@ void SimilarityDataset::save(const std::string& path) const {
     {
       h5::Handle file = h5::open_file(temporary.string(), h5::OpenMode::Truncate);
       h5::write_string_attribute(file.id(), "format", kFormat);
-      h5::write_int_attribute(file.id(), "schema_version", 2);
+      h5::write_int_attribute(file.id(), "schema_version", 3);
       h5::write_string_attribute(file.id(), "data_mode",
                                  matched_datasets_ ? "embedded" : "lightweight");
       h5::write_bytes_dataset(file.id(), "table.parquet", payload.data(), payload.size(), false);

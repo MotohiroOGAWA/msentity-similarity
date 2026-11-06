@@ -52,18 +52,20 @@ lib = _load()
 
 # ---- types -----------------------------------------------------------------------------
 
-METHODS = {"cosine": 0, "reverse_cosine": 1}
+# Method flags (MSSIM_METHOD_*), in the order of the result columns.
+METHODS = {"cosine": 0x1, "reverse_cosine": 0x2, "modified_cosine": 0x4, "bonanza": 0x8}
 
 
 class Options(ctypes.Structure):
     """struct mssim_options"""
 
     _fields_ = [
-        ("method", ctypes.c_int32),
+        ("methods", ctypes.c_int32),
         ("threads", ctypes.c_int32),
         ("mz_tolerance_da", ctypes.c_double),
         ("mz_tolerance_ppm", ctypes.c_double),
         ("intensity_exponent", ctypes.c_double),
+        ("precursor_column", ctypes.c_char_p),
     ]
 
 
@@ -123,7 +125,8 @@ _declare("mssim_match_positions", i32, Handle, i64, ctypes.POINTER(i64), ctypes.
 
 _declare("mssim_filter", i32, Handle, ctypes.POINTER(ctypes.c_uint8), i64, HandlePtr)
 _declare("mssim_sort_by", i32, Handle, ctypes.POINTER(cstr), ctypes.POINTER(i32), i64, HandlePtr)
-_declare("mssim_describe_scores", i32, Handle, ctypes.POINTER(f64))
-_declare("mssim_histogram", i32, Handle, i32, ctypes.POINTER(i64), ctypes.POINTER(f64))
+_declare("mssim_score_columns", i32, Handle, StrOut)
+_declare("mssim_describe_scores", i32, Handle, cstr, ctypes.POINTER(f64))
+_declare("mssim_histogram", i32, Handle, cstr, i32, ctypes.POINTER(i64), ctypes.POINTER(f64))
 _declare("mssim_export_table", i32, Handle, cstr)
 _declare("mssim_table_arrow", i32, Handle, ctypes.POINTER(ArrowArrayStream))

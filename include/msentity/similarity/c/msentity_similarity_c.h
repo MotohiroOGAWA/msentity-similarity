@@ -32,15 +32,23 @@
 extern "C" {
 #endif
 
-#define MSSIM_METHOD_COSINE 0
-#define MSSIM_METHOD_REVERSE_COSINE 1
+/* Score methods, combined with |; result tables get one column per method,
+ * named cosine, reverse_cosine, modified_cosine, bonanza (in this order). The
+ * last two need a precursor m/z (otherwise their cells are null). */
+#define MSSIM_METHOD_COSINE 0x1
+#define MSSIM_METHOD_REVERSE_COSINE 0x2
+#define MSSIM_METHOD_MODIFIED_COSINE 0x4
+#define MSSIM_METHOD_BONANZA 0x8
 
 typedef struct mssim_options {
-  int32_t method;            /* MSSIM_METHOD_* */
-  int32_t threads;           /* 0 = all hardware threads */
-  double mz_tolerance_da;    /* >= 0, default 0.01; 0 disables */
-  double mz_tolerance_ppm;   /* >= 0, default 10; 0 disables */
-  double intensity_exponent; /* > 0, default 1.0 */
+  int32_t methods;              /* MSSIM_METHOD_* flags, at least one; default COSINE.
+                                   pair_scores / all_pairs need exactly one. */
+  int32_t threads;              /* 0 = all hardware threads */
+  double mz_tolerance_da;       /* >= 0, default 0.01; 0 disables */
+  double mz_tolerance_ppm;      /* >= 0, default 10; 0 disables */
+  double intensity_exponent;    /* > 0, default 1.0 */
+  const char* precursor_column; /* precursor m/z column; NULL or "" detects
+                                   PrecursorMZ, precursor_mz, PEPMASS, ParentMZ */
 } mssim_options;
 
 /* (completed pairs, total pairs, user data) */
@@ -59,6 +67,8 @@ MSSIM_C_API void mssim_default_options(mssim_options* options);
  * "10ppm", or "10 PPM, 0.01da" (a unit left out becomes 0); the other fields
  * are unchanged. */
 MSSIM_C_API int32_t mssim_parse_mz_tolerance(const char* text, mssim_options* options);
+/* Sets methods from comma-separated names, e.g. "cosine,bonanza". */
+MSSIM_C_API int32_t mssim_parse_methods(const char* text, mssim_options* options);
 /* Canonical text of the two tolerances, e.g. "0.01Da,10ppm" (free with mssim_string_free). */
 MSSIM_C_API int32_t mssim_format_mz_tolerance(const mssim_options* options, char** out);
 
@@ -116,11 +126,16 @@ MSSIM_C_API int32_t mssim_filter(const mssim_result* result, const uint8_t* mask
                                  mssim_result** out);
 MSSIM_C_API int32_t mssim_sort_by(const mssim_result* result, const char* const* columns,
                                   const int32_t* ascending, int64_t n, mssim_result** out);
-/* out[7] = count, mean, q1, median, q3, min, max. */
-MSSIM_C_API int32_t mssim_describe_scores(const mssim_result* result, double* out);
+/* Score columns, comma-separated in table order, e.g. "cosine,bonanza"
+ * (free with mssim_string_free). */
+MSSIM_C_API int32_t mssim_score_columns(const mssim_result* result, char** out);
+/* Of a score column (NULL or "" = the first); missing values are left out.
+ * out[7] = count, mean, q1, median, q3, min, max. */
+MSSIM_C_API int32_t mssim_describe_scores(const mssim_result* result, const char* column,
+                                          double* out);
 /* counts has bins entries, edges bins + 1. */
-MSSIM_C_API int32_t mssim_histogram(const mssim_result* result, int32_t bins, int64_t* counts,
-                                    double* edges);
+MSSIM_C_API int32_t mssim_histogram(const mssim_result* result, const char* column, int32_t bins,
+                                    int64_t* counts, double* edges);
 MSSIM_C_API int32_t mssim_export_table(const mssim_result* result, const char* path);
 /* Result table as an Arrow C stream (struct ArrowArrayStream*). */
 MSSIM_C_API int32_t mssim_table_arrow(const mssim_result* result, void* out_stream);

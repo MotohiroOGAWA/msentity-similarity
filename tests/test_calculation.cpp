@@ -18,13 +18,129 @@ MSDataset sample() { return io::read_msp(msentity_data("sample.msp")); }
 
 // ---- definition on hand-made spectra ------------------------------------------
 
+// Column `name` of a result table as doubles.
+std::vector<double> float_column(const arrow::Table& table, const std::string& name) {
+  std::vector<double> out;
+  for (const auto& value : internal::to_values(*table.GetColumnByName(name))) {
+    out.push_back(std::get<double>(value));
+  }
+  return out;
+}
+
+TEST(Coverage, MatchedShareOfSquaredIntensities) {
+  // a: 100 (3), 200 (4); b: 100 (1), 300 (1). Only 100 matches.
+  MSDataset a = spectra({{{100.0, 3.0}, {200.0, 4.0}}, {}});
+  MSDataset b = spectra({{{100.0, 1.0}, {300.0, 1.0}}, {{100.0, 2.0}}});
+  a.set_column("ID", std::vector<Value>{std::string("x"), std::string("y")});
+  b.set_column("ID", std::vector<Value>{std::string("x"), std::string("y")});
+  auto table = similarity_by_key(a, b, "ID", "ID");
+  auto c1 = float_column(*table, "intensity_coverage1");
+  auto c2 = float_column(*table, "intensity_coverage2");
+  auto s = float_column(*table, "cosine");
+  EXPECT_FLOAT_EQ(c1[0], 9.0f / 25.0f);  // 3² / (3² + 4²)
+  EXPECT_FLOAT_EQ(c2[0], 0.5f);          // 1² / (1² + 1²)
+  EXPECT_EQ(c1[1], 0.0);                 // empty spectrum
+  EXPECT_EQ(c2[1], 0.0);
+
+  // Exponent 0.5: coverage is the plain intensity share, 3 / 7.
+  Options root;
+  root.intensity_exponent = 0.5;
+  auto rooted = similarity_by_key(a, b, "ID", "ID", root);
+  EXPECT_FLOAT_EQ(float_column(*rooted, "intensity_coverage1")[0], 3.0f / 7.0f);
+
+  // cosine <= sqrt(c1 c2); reverse cosine <= sqrt(c2).
+  EXPECT_LE(s[0], std::sqrt(c1[0] * c2[0]) + 1e-6);
+  Options reverse;
+  reverse.methods = {Method::ReverseCosine};
+  auto reversed = similarity_by_key(a, b, "ID", "ID", reverse);
+  EXPECT_LE(float_column(*reversed, "reverse_cosine")[0],
+            std::sqrt(float_column(*reversed, "intensity_coverage2")[0]) + 1e-6);
+}
+
+TEST(PrecursorMethods, ModifiedCosineAndBonanza) {
+  // x: a 100, 150 (precursor 200) vs b 100, 160 (precursor 210): the shift
+  //    -10 pairs 150 with 160, so modified cosine and BONANZA are 1.
+  // y: a 100 (3), 150 (1) vs b 100 (1), 300 (1), only 100 pairs:
+  //    cosine 3 / (√10 √2); BONANZA with p = (.75, .25), q = (.5, .5):
+  //    .375 / (.375 + .25² + .5²).
+  // z: no precursor m/z on the second side: those cells are null.
+  MSDataset a = spectra({{{100, 1}, {150, 1}}, {{100, 3}, {150, 1}}, {{100, 1}}});
+  MSDataset b = spectra({{{100, 1}, {160, 1}}, {{100, 1}, {300, 1}}, {{100, 1}}});
+  a.set_column("ID", std::vector<Value>{std::string("x"), std::string("y"), std::string("z")});
+  b.set_column("ID", std::vector<Value>{std::string("x"), std::string("y"), std::string("z")});
+  a.set_column("PrecursorMZ", std::vector<Value>{200.0, 200.0, 200.0});
+  b.set_column("PEPMASS", std::vector<Value>{std::string("210 1000"), std::string("210"), std::monostate{}});
+  Options options;
+  options.methods = {Method::Bonanza, Method::ModifiedCosine, Method::Cosine, Method::Bonanza};
+  auto table = similarity_by_key(a, b, "ID", "ID", options);
+  EXPECT_EQ(internal::column_names(*table),
+            (std::vector<std::string>{"ID", "index1", "index2", "cosine", "modified_cosine", "bonanza",
+                                      "intensity_coverage1", "intensity_coverage2"}));
+  auto cosine = internal::to_values(*table->GetColumnByName("cosine"));
+  auto modified = internal::to_values(*table->GetColumnByName("modified_cosine"));
+  auto bonanza = internal::to_values(*table->GetColumnByName("bonanza"));
+  EXPECT_FLOAT_EQ(std::get<double>(cosine[0]), 0.5f);
+  EXPECT_FLOAT_EQ(std::get<double>(modified[0]), 1.0f);
+  EXPECT_FLOAT_EQ(std::get<double>(bonanza[0]), 1.0f);
+  EXPECT_FLOAT_EQ(std::get<double>(cosine[1]), static_cast<float>(3 / (std::sqrt(10.0) * std::sqrt(2.0))));
+  EXPECT_FLOAT_EQ(std::get<double>(modified[1]), std::get<double>(cosine[1]));
+  EXPECT_FLOAT_EQ(std::get<double>(bonanza[1]), static_cast<float>(0.375 / 0.6875));
+  EXPECT_FLOAT_EQ(std::get<double>(cosine[2]), 1.0f);
+  EXPECT_TRUE(is_null(modified[2]));
+  EXPECT_TRUE(is_null(bonanza[2]));
+
+  // A named precursor column must exist; pair_scores gives NaN without one.
+  options.precursor_column = "Missing";
+  EXPECT_THROW(similarity_by_key(a, b, "ID", "ID", options), KeyError);
+  Options single;
+  single.methods = {Method::ModifiedCosine};
+  auto scores = pair_scores(a, {0, 2}, b, {0, 2}, single);
+  EXPECT_FLOAT_EQ(scores[0], 1.0f);
+  EXPECT_TRUE(std::isnan(scores[1]));
+  single.methods = {Method::Cosine, Method::Bonanza};
+  EXPECT_THROW(pair_scores(a, {0}, b, {0}, single), std::invalid_argument);
+  EXPECT_EQ(parse_methods(" bonanza,cosine "), (std::vector<Method>{Method::Bonanza, Method::Cosine}));
+  EXPECT_THROW(parse_methods("cosine,dot"), std::invalid_argument);
+}
+
+TEST(PrecursorMethods, LibrarySearchKeepsPairsAboveThresholdForAnyMethod) {
+  MSDataset a = spectra({{{100, 1}, {150, 1}}});
+  MSDataset b = spectra({{{100, 1}, {160, 1}}, {{500, 1}}});
+  a.set_column("PrecursorMZ", Value(200.0));
+  b.set_column("PrecursorMZ", Value(210.0));
+  Options options;
+  options.methods = {Method::Cosine, Method::ModifiedCosine};
+  auto table = library_search(a, b, 0.9, options);  // cosine 0.5, modified cosine 1
+  EXPECT_EQ(table->num_rows(), 1);
+  options.methods = {Method::Cosine};
+  EXPECT_EQ(library_search(a, b, 0.9, options)->num_rows(), 0);
+}
+
+TEST(Coverage, BoundHoldsOnSampleLibrarySearch) {
+  MSDataset ds = sample();
+  for (double exponent : {0.5, 1.0}) {
+    Options options;
+    options.intensity_exponent = exponent;
+    auto table = library_search(ds, ds, 0.0, options);
+    auto s = float_column(*table, "cosine");
+    auto c1 = float_column(*table, "intensity_coverage1");
+    auto c2 = float_column(*table, "intensity_coverage2");
+    ASSERT_EQ(s.size(), c1.size());
+    for (std::size_t i = 0; i < s.size(); ++i) {
+      EXPECT_GE(c1[i], 0.0);
+      EXPECT_LE(c1[i], 1.0);
+      EXPECT_LE(s[i], std::sqrt(c1[i] * c2[i]) + 1e-6);
+    }
+  }
+}
+
 TEST(Score, CosineAndReverseCosine) {
   // a: 100, 200; b: 100, 300 (unit intensities).
   MSDataset a = spectra({{{100.0, 1.0}, {200.0, 1.0}}});
   MSDataset b = spectra({{{100.0, 1.0}, {300.0, 1.0}}});
   EXPECT_FLOAT_EQ(pair_scores(a, {0}, b, {0})[0], 0.5f);  // 1 / (√2 √2)
   Options reverse;
-  reverse.method = Method::ReverseCosine;
+  reverse.methods = {Method::ReverseCosine};
   // Only a's matched peak counts in its norm: 1 / (√1 √2).
   EXPECT_FLOAT_EQ(pair_scores(a, {0}, b, {0}, reverse)[0], static_cast<float>(1 / std::sqrt(2.0)));
 }
@@ -191,7 +307,7 @@ TEST(Reference, MethodsAndTolerances) {
   MSDataset ds = sample();
   for (const auto& c : cases) {
     Options options;
-    options.method = c.method;
+    options.methods = {c.method};
     options.mz_tolerance_da = c.tolerance_da;
     options.mz_tolerance_ppm = c.tolerance_ppm;
     options.intensity_exponent = c.exponent;
@@ -249,7 +365,8 @@ TEST(ByKey, PairsEqualKeysInFirstDatasetOrder) {
   ds2.set_column("Key", std::vector<Value>{std::string("d"), std::string("a"), std::string("x")});
   auto table = similarity_by_key(ds1, ds2, "ID", "Key");
   EXPECT_EQ(internal::column_names(*table),
-            (std::vector<std::string>{"ID", "Key", "index1", "index2", "similarity"}));
+            (std::vector<std::string>{"ID", "Key", "index1", "index2", "cosine",
+                                      "intensity_coverage1", "intensity_coverage2"}));
   EXPECT_EQ(table->num_rows(), 2);
   auto ids = internal::to_values(*table->column(0));
   EXPECT_EQ(std::get<std::string>(ids[0]), "a");
@@ -262,7 +379,8 @@ TEST(ByKey, PairsEqualKeysInFirstDatasetOrder) {
   ds2.set_column("N", std::vector<Value>{4.0, 1.0, 7.0});
   auto numeric = similarity_by_key(ds1, ds2, "N", "N");
   EXPECT_EQ(internal::column_names(*numeric),
-            (std::vector<std::string>{"N", "index1", "index2", "similarity"}));
+            (std::vector<std::string>{"N", "index1", "index2", "cosine",
+                                      "intensity_coverage1", "intensity_coverage2"}));
   EXPECT_EQ(numeric->num_rows(), 2);
 }
 
@@ -273,6 +391,9 @@ TEST(ByKey, Errors) {
   EXPECT_THROW(similarity_by_key(ds, ds, "Missing", "ID"), KeyError);
   ds.set_column("index1", Value(int64_t{1}));
   EXPECT_THROW(similarity_by_key(ds, ds, "index1", "index1"), std::invalid_argument);  // reserved
+  ds.set_column("intensity_coverage1", Value(int64_t{1}));
+  EXPECT_THROW(similarity_by_key(ds, ds, "intensity_coverage1", "intensity_coverage1"),
+               std::invalid_argument);
 }
 
 }  // namespace

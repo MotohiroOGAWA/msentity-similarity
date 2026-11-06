@@ -1,6 +1,6 @@
 # MSSIM file format (`.mssim`)
 
-Status: **schema version 2**. This document is the normative definition of the
+Status: **schema version 3**. This document is the normative definition of the
 format; any implementation that follows it can exchange files with any other.
 The key words MUST, SHOULD, and MAY are used as in RFC 2119.
 
@@ -55,10 +55,10 @@ complete content; every value below was read from that file.
 ```text
 example.mssim
   @format         = "msentity.similarity"      ← identifies the file type
-  @schema_version = 2                          ← this document
+  @schema_version = 3                          ← this document
   @data_mode      = "embedded"                 ← matched spectra are included
 │
-├── table.parquet       uint8[1761]            ← a Parquet file: the result table (A)
+├── table.parquet       uint8[2367]            ← a Parquet file: the result table (A)
 │
 ├── metadata.json       string (scalar)        ← calculation metadata as JSON (B)
 │
@@ -78,23 +78,26 @@ example.mssim
 ### A. The result table (`table.parquet`)
 
 ```text
- index1  index2  similarity          data_index1  data_index2
-      0       0  1.0                           0            0
-      0       1  0.7597143650054932            0            1
-      1       0  0.7597143650054932            1            0
-      1       1  1.0                           1            1
+ index1  index2  cosine              intensity_coverage1  intensity_coverage2  data_index1  data_index2
+      0       0  1.0                 1.0                  1.0                            0            0
+      0       1  0.7597143650054932  0.9292697906494141   1.0                            0            1
+      1       0  0.7597143650054932  1.0                  0.9292697906494141             1            0
+      1       1  1.0                 1.0                  1.0                            1            1
 ```
 
 | Column | Type | Meaning |
 |---|---|---|
 | `index1` | int64 | position (0-based) of the spectrum in the **first / query** input dataset |
 | `index2` | int64 | position of the spectrum in the **second / reference** input dataset |
-| `similarity` | float32 | the score, in [0, 1]. The column has this name for every method (the method is in the metadata) |
+| `cosine`, `reverse_cosine`, `modified_cosine`, `bonanza` | float32 | one column per calculated method (`parameters.methods`), in this order; the score in [0, 1], or null when the method needs a precursor m/z that a spectrum lacks ([../similarity.md](../similarity.md)) |
+| `intensity_coverage1` | float32 | share of the first / query spectrum's Σ intensity^(2·exponent) carried by its matched peaks, in [0, 1] ([../similarity.md](../similarity.md#8-intensity-coverage)) |
+| `intensity_coverage2` | float32 | the same for the second / reference spectrum |
 | `data_index1` | int64 | row of `matched_data/1/dataset.msds` holding spectrum `index1` (embedded mode only) |
 | `data_index2` | int64 | row of `matched_data/2/dataset.msds` holding spectrum `index2` (embedded mode only) |
 
 Row 1 says: query spectrum 0 (`MassSpecID0000001`) and reference spectrum 1
-(`MassSpecID0000002`) have a cosine similarity of 0.7597. Their peaks are in
+(`MassSpecID0000002`) have a cosine similarity of 0.7597; the matched peaks
+carry 92.9 % of the query's squared intensity and all of the reference's. Their peaks are in
 row 0 of side 1 and row 1 of side 2 of `matched_data`. How the score is computed
 is described in [../similarity.md](../similarity.md).
 
@@ -102,9 +105,9 @@ Results of a **by-key** calculation start with the key columns. With key
 `SpecID` on both sides there is one key column:
 
 ```text
- SpecID  index1  index2  similarity
- SP1          0       1  1.0
- SP2          1       0  1.0
+ SpecID  index1  index2  cosine      intensity_coverage1  intensity_coverage2
+ SP1          0       1  1.0         1.0                  1.0
+ SP2          1       0  1.0         1.0                  1.0
 ```
 
 With different key names (for example `ID` and `Key`) there are two, `ID` and
@@ -114,16 +117,19 @@ With different key names (for example `ID` and `Key`) there are two, `ID` and
 
 ```jsonc
 {
-  "created_at": "2026-11-01T12:00:17.248543+00:00",  // when the result was calculated (UTC)
+  "created_at": "2026-11-06T15:41:04.244104+00:00",  // when the result was calculated (UTC)
   "mode": "library_search",                // "library_search" or "by_key"
-  "algorithm": "tolerance_cosine_similarity_library_search",
-                                           // tolerance_<method>_similarity_<mode name>
+  "algorithm": "tolerance_similarity_library_search",
+                                           // tolerance_similarity_<mode name>
   "parameters": {
-    "threshold": 0.7,                      // library search: minimum score kept
-    "method": "cosine",                    // "cosine" or "reverse_cosine"
+    "threshold": 0.7,                      // library search: a pair is kept when any
+                                           // method scores at least this
+    "methods": ["cosine"],                 // the score columns: "cosine", "reverse_cosine",
+                                           // "modified_cosine", "bonanza"
     "mz_tolerance_da": 0.01,               // peaks matched within this many Da (0 = off)
     "mz_tolerance_ppm": 10.0,              // ... or within this many ppm (0 = off)
-    "intensity_exponent": 1.0              // intensities were raised to this power
+    "intensity_exponent": 1.0,             // intensities were raised to this power
+    "precursor_column": ""                 // precursor m/z column ("" = detected)
   },                                       // (by_key: "key1" and "key2" instead of "threshold")
   "matching": "all_pairs_at_or_above_threshold",
                                            // by_key: "unique_intersection"
@@ -173,24 +179,31 @@ the original input files, which must be kept to look the spectra up.
 
 1. The file MUST be HDF5 and SHOULD use the extension `.mssim`.
 2. The root group MUST carry the attributes
-   `format = "msentity.similarity"` (string) and `schema_version = 2` (integer).
+   `format = "msentity.similarity"` (string) and `schema_version = 3` (integer).
    It SHOULD carry `data_mode` = `"embedded"` or `"lightweight"`.
 3. Readers MUST reject files whose `format` differs and MUST reject schema
-   versions they do not know. Readers SHOULD also accept schema version 1,
-   which is version 2 without `matched_data`.
+   versions they do not know. Readers SHOULD also accept schema versions 1
+   and 2, which have one score column `similarity` (its method is
+   `parameters.method` of the metadata, `cosine` when absent) instead of
+   method columns; version 1 also has no `matched_data`. The reference
+   implementation reads that column as the column of its method.
 
 ### Table
 
 4. `table.parquet` MUST be a one-dimensional `uint8` dataset holding a
    complete Parquet file.
-5. The table MUST have the columns `index1`, `index2` (integers), and
-   `similarity` (numbers). Writers SHOULD store the indices as int64 and
-   scores as float32.
-6. Every score MUST be finite and in [0, 1].
+5. The table MUST have the columns `index1`, `index2` (integers), and at
+   least one score column named by a method: `cosine`, `reverse_cosine`,
+   `modified_cosine`, `bonanza` (numbers). Writers SHOULD store the indices as
+   int64 and scores as float32, and SHOULD write score columns in that order.
+6. Every score MUST be null (not available, e.g. no precursor m/z) or finite
+   and in [0, 1].
 7. `index1` / `index2` are 0-based positions in the input datasets as they were
    at calculation time (after any view selection, before saving).
-8. Other columns MAY be present (key columns, user-added columns); readers
-   MUST keep them.
+8. Other columns MAY be present (key columns, `intensity_coverage1` /
+   `intensity_coverage2`, user-added columns); readers MUST keep them. Files
+   written by earlier versions of the reference implementation have no
+   coverage columns; readers MUST NOT require them.
 
 ### Metadata
 

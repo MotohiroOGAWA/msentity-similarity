@@ -67,7 +67,7 @@ For the two spectra of [examples/example.msp](examples/example.msp), with the de
 | 185.0961 | 349 | — |
 | 246.1125 | 735 | 1000 |
 
-## 2. Cosine (`method = "cosine"`)
+## 2. Cosine (`cosine`)
 
 ```text
             Σ  a · r                  (over the matched peak pairs)
@@ -86,7 +86,7 @@ cosine = 1 040 255 / (1312.2694 · 1043.4376) = 0.75971
 
 The score is symmetric: spectrum 1 vs spectrum 0 is also 0.75971.
 
-## 3. Reverse cosine (`method = "reverse_cosine"`)
+## 3. Reverse cosine (`reverse_cosine`)
 
 The same, except that the **query** norm counts only the query peaks that are
 matched to a reference peak. Extra query peaks (for example impurities or
@@ -110,7 +110,73 @@ Spectrum 1 as query vs spectrum 0 as reference: every peak of spectrum 1 is
 matched, so the score equals the cosine, 0.75971. Reverse cosine is therefore
 **not** symmetric.
 
-## 4. Edge cases and output
+## 4. Modified cosine (`modified_cosine`)
+
+Fragments that keep the part of the molecule where two related compounds
+differ appear shifted by the difference of their precursor m/z. Modified
+cosine therefore also pairs such peaks: with `shift = precursor1 − precursor2`,
+a peak at mz1 can pair with a peak at mz2 directly (§1) **or** when mz1 and
+mz2 + shift match under the same tolerance rule. Direct and shifted pairs are
+taken together, smallest error (|mz1 − mz2| or |mz1 − (mz2 + shift)|) first,
+each peak at most once. The score is then the cosine of these pairs, with the
+norms over all peaks:
+
+```text
+                    Σ  a · r            (over the direct and shifted pairs)
+modified_cosine = ─────────────
+                    ‖a‖ · ‖r‖
+```
+
+With equal precursor m/z (as for the two example spectra, both 288.1225) it
+equals the cosine, 0.75971.
+
+## 5. BONANZA (`bonanza`)
+
+Peaks are paired as for modified cosine. Each spectrum's intensities are
+divided by their sum (p = a / Σa, q = r / Σr). Of these shares, p_u and q_v
+denote those of the **unpaired** peaks (peaks without a partner) of the first
+and the second spectrum; p·q runs over the pairs:
+
+```text
+                Σ p·q                         (p·q: over the pairs)
+bonanza = ──────────────────────────────────
+           Σ p·q + Σ p_u² + Σ q_v²            (p_u, q_v: unpaired peaks only)
+```
+
+Unpaired peaks lower the score through their squared share instead of through
+the norms. For the example spectra (sums 2329 and 1380), the 185.0961 peak of
+spectrum 0 is its only unpaired peak, and every peak of spectrum 1 has a
+partner, so Σ q_v² is 0:
+
+```text
+Σ p·q   = (245·99 + 1000·281 + 735·1000) / (2329 · 1380) = 0.323662
+Σ p_u²  = (349 / 2329)²                                  = 0.022455
+Σ q_v²  = 0                                              (no unpaired peak in spectrum 1)
+bonanza = 0.323662 / (0.323662 + 0.022455 + 0)           = 0.93512
+```
+
+### Precursor m/z
+
+Modified cosine and BONANZA need the precursor m/z of both spectra. It is
+read from the metadata column `precursor_column`, or, when that is empty (the
+default), from the first of `PrecursorMZ`, `precursor_mz`, `PEPMASS`,
+`ParentMZ` (names compared case-insensitively) that holds a positive number
+for the spectrum. Text values are read up to the first space (`301.14 1000`
+in MGF PEPMASS gives 301.14). A named column that does not exist is an error.
+When either spectrum has no precursor m/z, these two scores are **missing**:
+null in result tables, NaN from `pair_scores` / `all_pairs_matrix`; the other
+methods are still calculated for that pair.
+
+## 6. Several methods at once
+
+`methods` selects one or more of the four; result tables get one score column
+per method, named as above and always in the order `cosine`,
+`reverse_cosine`, `modified_cosine`, `bonanza`. `library_search` keeps a pair
+when **any** selected method scores at least the threshold (missing scores
+never do). `pair_scores` and `all_pairs_matrix` return one score per pair and
+need exactly one method.
+
+## 7. Edge cases and output
 
 * An empty spectrum, or one whose intensities are all 0, scores 0 against anything.
 * Scores are clipped to [0, 1] (to absorb rounding) and returned as 32-bit floats.
@@ -120,14 +186,57 @@ matched, so the score equals the cosine, 0.75971. Reverse cosine is therefore
 * `intensity_exponent = 0.5` (square root) reduces the weight of dominant peaks.
   For the example spectra it raises the cosine from 0.75971 to 0.86077.
 
-## 5. Calculation modes
+## 8. Intensity coverage
+
+Result tables (`library_search`, `similarity_by_key`) also report, for each
+side, how much of the spectrum the matched peaks explain:
+
+```text
+                        Σ  x²   (over the matched peaks of x)
+intensity_coverage = ─────────
+                        Σ  x²   (over all peaks of x)
+```
+
+where x are the intensities after step 1 (raised to `intensity_exponent`, so
+x² = I^(2·exponent)). With `intensity_exponent = 0.5` this is simply the
+matched share of the summed raw intensity. A spectrum without positive
+intensity has coverage 0. The columns are `intensity_coverage1` (first /
+query spectrum) and `intensity_coverage2` (second / reference spectrum).
+
+By the Cauchy–Schwarz inequality the score cannot exceed what the coverages
+allow:
+
+```text
+cosine          ≤ sqrt(intensity_coverage1 · intensity_coverage2) ≤ sqrt(min of the two)
+reverse_cosine  ≤ sqrt(intensity_coverage2)
+```
+
+The coverages come from the direct pairing (§1), the one cosine and reverse
+cosine use. Modified cosine and BONANZA pair more peaks and normalize
+differently, so no such bound holds for them.
+
+So if spectrum 1 is a measured spectrum and spectrum 2 a prediction, a cosine
+above sqrt(intensity_coverage1) is impossible however good the predicted
+intensities are; equality needs every peak of the other side matched and the
+matched intensities proportional.
+
+For the example spectra (spectrum 0 vs spectrum 1, exponent 1), the 185.0961
+peak of spectrum 0 is unmatched:
+
+```text
+intensity_coverage1 = (245² + 1000² + 735²) / (245² + 1000² + 349² + 735²) = 0.92927
+intensity_coverage2 = 1
+cosine 0.75971 ≤ sqrt(0.92927 · 1) = 0.96399
+```
+
+## 9. Calculation modes
 
 | Mode | Pairs compared | Result rows |
 |---|---|---|
 | `pair_scores` | the pairs you list: (ds1[i1[k]], ds2[i2[k]]) | one score per pair (array) |
 | `all_pairs_matrix` | every spectrum of ds1 with every spectrum of ds2 | len(ds1) × len(ds2) matrix |
-| `library_search` | every query × every reference spectrum | one row per pair with score ≥ threshold, ordered by query then reference |
-| `similarity_by_key` | spectra whose key values are equal (`key1` in ds1 = `key2` in ds2) | one row per matching key, in ds1 order |
+| `library_search` | every query × every reference spectrum | one row per pair with score ≥ threshold, ordered by query then reference; with intensity coverages |
+| `similarity_by_key` | spectra whose key values are equal (`key1` in ds1 = `key2` in ds2) | one row per matching key, in ds1 order; with intensity coverages |
 
 Notes on `similarity_by_key`:
 

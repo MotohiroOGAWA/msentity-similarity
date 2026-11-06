@@ -58,11 +58,12 @@ final class Native {
   /** struct mssim_options */
   static final StructLayout OPTIONS =
       MemoryLayout.structLayout(
-          JAVA_INT.withName("method"),
+          JAVA_INT.withName("methods"),
           JAVA_INT.withName("threads"),
           JAVA_DOUBLE.withName("mz_tolerance_da"),
           JAVA_DOUBLE.withName("mz_tolerance_ppm"),
-          JAVA_DOUBLE.withName("intensity_exponent"));
+          JAVA_DOUBLE.withName("intensity_exponent"),
+          ADDRESS.withName("precursor_column"));
 
   // ---- loading ------------------------------------------------------------------------------
   static final Linker LINKER = Linker.nativeLinker();
@@ -143,6 +144,7 @@ final class Native {
   static final MethodHandle bytesFree = fn("mssim_bytes_free", null, P);
   static final MethodHandle valuesClear = fn("mssim_values_clear", null, P, I64);
   static final MethodHandle parseMzTolerance = fn("mssim_parse_mz_tolerance", I32, P, P);
+  static final MethodHandle parseMethods = fn("mssim_parse_methods", I32, P, P);
   static final MethodHandle formatMzTolerance = fn("mssim_format_mz_tolerance", I32, P, P);
 
   static final MethodHandle pairScores = fn("mssim_pair_scores", I32, P, I64, P, P, I64, P, I64, P, P);
@@ -171,8 +173,9 @@ final class Native {
 
   static final MethodHandle filter = fn("mssim_filter", I32, P, P, I64, P);
   static final MethodHandle sortBy = fn("mssim_sort_by", I32, P, P, P, I64, P);
-  static final MethodHandle describeScores = fn("mssim_describe_scores", I32, P, P);
-  static final MethodHandle histogram = fn("mssim_histogram", I32, P, I32, P, P);
+  static final MethodHandle scoreColumns = fn("mssim_score_columns", I32, P, P);
+  static final MethodHandle describeScores = fn("mssim_describe_scores", I32, P, P, P);
+  static final MethodHandle histogram = fn("mssim_histogram", I32, P, P, I32, P, P);
   static final MethodHandle exportTable = fn("mssim_export_table", I32, P, P);
 
   // ---- helpers ------------------------------------------------------------------------------------

@@ -81,7 +81,8 @@ class TestCalculation(unittest.TestCase):
                                     progress=lambda done, total: calls.append((done, total)))
         self.assertEqual(len(result), 9)
         self.assertEqual(calls[-1], (25, 25))
-        self.assertEqual(result.columns, ["index1", "index2", "similarity",
+        self.assertEqual(result.columns, ["index1", "index2", "cosine",
+                                          "intensity_coverage1", "intensity_coverage2",
                                           "data_index1", "data_index2"])
         self.assertEqual(result["index2"], [0, 1, 4, 2, 3, 2, 3, 1, 4])
         metadata = result.metadata
@@ -100,10 +101,12 @@ class TestCalculation(unittest.TestCase):
     def test_by_key(self) -> None:
         self.ds.set_spec_id("SpecID", "SP")
         reordered = self.ds[[4, 3, 2]]
-        result = mss.similarity_by_key(self.ds, reordered, method="reverse_cosine")
-        # The score column keeps its name for every method.
-        self.assertEqual(result.columns, ["SpecID", "index1", "index2", "similarity"])
-        self.assertEqual(result.metadata["parameters"]["method"], "reverse_cosine")
+        result = mss.similarity_by_key(self.ds, reordered, methods="reverse_cosine")
+        # One score column, named by the method.
+        self.assertEqual(result.columns, ["SpecID", "index1", "index2", "reverse_cosine",
+                                          "intensity_coverage1", "intensity_coverage2"])
+        self.assertEqual(result.metadata["parameters"]["methods"], ["reverse_cosine"])
+        self.assertEqual(result.score_columns, ["reverse_cosine"])
         self.assertEqual(result["index1"], [2, 3, 4])
         self.assertEqual(result["index2"], [2, 1, 0])
         self.assertFalse(result.has_matched_data)
@@ -111,6 +114,22 @@ class TestCalculation(unittest.TestCase):
             result.match_records(0)
         with self.assertRaises(mss.ColumnError):
             mss.similarity_by_key(self.ds, self.ds, "Missing", "SpecID")
+
+    def test_several_methods(self) -> None:
+        # sample.msp has PrecursorMZ, so the precursor methods have values.
+        self.ds.set_spec_id("SpecID", "SP")
+        result = mss.similarity_by_key(self.ds, self.ds,
+                                       methods=["bonanza", "cosine", "modified_cosine"])
+        self.assertEqual(result.score_columns, ["cosine", "modified_cosine", "bonanza"])
+        for column in result.score_columns:
+            self.assertTrue(all(v == 1.0 for v in result[column]))
+        self.assertEqual(result.describe_scores("bonanza")["count"], len(result))
+        counts, _ = result.histogram(2, column="modified_cosine")
+        self.assertEqual(int(counts.sum()), len(result))
+        with self.assertRaises(mss.InvalidArgumentError):
+            mss.library_search(self.ds, self.ds, methods=["dot"])
+        with self.assertRaises(mss.InvalidArgumentError):
+            mss.pair_scores(self.ds, [0], self.ds, [0], method=["cosine", "bonanza"])
 
 
 class TestSimilarityDataset(unittest.TestCase):
@@ -126,7 +145,7 @@ class TestSimilarityDataset(unittest.TestCase):
         result = mss.library_search(ds, ds, 0.9)
         filtered = result.filter([i == 1 for i in result["index1"]])
         self.assertEqual(filtered.metadata["source_row_count"], 9)
-        ranked = filtered.sort_by("similarity", ascending=False)
+        ranked = filtered.sort_by("cosine", ascending=False)
         self.assertEqual(ranked["index2"], [1, 4])
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "hits.mssim"
@@ -137,7 +156,7 @@ class TestSimilarityDataset(unittest.TestCase):
             self.assertEqual(list(loaded.source_indices(2)), [1, 4])
             loaded.export(Path(tmp) / "hits.tsv")
             text = (Path(tmp) / "hits.tsv").read_text()
-            self.assertTrue(text.startswith("index1\tindex2\tsimilarity"))
+            self.assertTrue(text.startswith("index1\tindex2\tcosine"))
             with self.assertRaises(mss.InvalidArgumentError):
                 loaded.save(Path(tmp) / "hits.txt")
             with self.assertRaises(mss.FileError):
@@ -165,7 +184,7 @@ class TestSimilarityDataset(unittest.TestCase):
         ds = ms.load(SAMPLE)
         table = mss.library_search(ds, ds, 0.9).to_arrow()
         self.assertEqual(table.num_rows, 9)
-        self.assertEqual(str(table.schema.field("similarity").type), "float")
+        self.assertEqual(str(table.schema.field("cosine").type), "float")
 
 
 if __name__ == "__main__":
