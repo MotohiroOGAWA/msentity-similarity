@@ -3,7 +3,7 @@ using static MsEntity.Similarity.NativeMethods;
 
 namespace MsEntity.Similarity;
 
-/// <summary>Summary of the score column; NaN statistics when empty.</summary>
+/// <summary>Summary of a score column (missing scores left out); NaN statistics when empty.</summary>
 public sealed record ScoreSummary(long Count, double Mean, double Q1, double Median, double Q3, double Min,
     double Max);
 
@@ -15,7 +15,9 @@ public sealed record ScoreHistogram(long[] Counts, double[] Edges);
 /// </summary>
 /// <remarks>
 /// Columns: key columns (by-key results), <c>index1</c>, <c>index2</c> (positions in the input
-/// datasets), <c>similarity</c> (the score of any method), and <c>data_index1</c> /
+/// datasets), one score column per method (<c>cosine</c>, <c>reverse_cosine</c>,
+/// <c>modified_cosine</c>, <c>bonanza</c>; see <see cref="ScoreColumns"/>),
+/// <c>intensity_coverage1</c> / <c>intensity_coverage2</c>, and <c>data_index1</c> /
 /// <c>data_index2</c> when the compared spectra are embedded. Cell values are <c>null</c>,
 /// <see cref="bool"/>, <see cref="long"/>, <see cref="double"/>, or <see cref="string"/>.
 /// Dispose results when done.
@@ -198,16 +200,33 @@ public sealed class SimilarityDataset : IDisposable
 
     // ---- statistics -------------------------------------------------------------------------
 
-    /// <summary>count, mean, quartiles, min, and max of the score column.</summary>
-    public unsafe ScoreSummary DescribeScores()
+    /// <summary>The score columns in table order, e.g. [cosine, bonanza].</summary>
+    public IReadOnlyList<string> ScoreColumns
+    {
+        get
+        {
+            Check(mssim_score_columns(_handle, out IntPtr columns));
+            string text = TakeString(columns);
+            return text.Length == 0 ? Array.Empty<string>() : text.Split(',');
+        }
+    }
+
+    /// <summary>
+    /// count, mean, quartiles, min, and max of a score column (null = the first); missing scores
+    /// are left out.
+    /// </summary>
+    public unsafe ScoreSummary DescribeScores(string? column = null)
     {
         double* v = stackalloc double[7];
-        Check(mssim_describe_scores(_handle, v));
+        Check(mssim_describe_scores(_handle, column, v));
         return new ScoreSummary((long)v[0], v[1], v[2], v[3], v[4], v[5], v[6]);
     }
 
-    /// <summary>Score histogram over [0, 1] with 1–200 bins.</summary>
-    public unsafe ScoreHistogram Histogram(int bins = 20)
+    /// <summary>
+    /// Histogram over [0, 1] with 1–200 bins of a score column (null = the first); missing scores
+    /// are left out.
+    /// </summary>
+    public unsafe ScoreHistogram Histogram(int bins = 20, string? column = null)
     {
         if (bins < 1 || bins > 200) throw new SimilarityArgumentException("bins must be between 1 and 200");
         var counts = new long[bins];
@@ -215,7 +234,7 @@ public sealed class SimilarityDataset : IDisposable
         fixed (long* pc = counts)
         fixed (double* pe = edges)
         {
-            Check(mssim_histogram(_handle, bins, pc, pe));
+            Check(mssim_histogram(_handle, column, bins, pc, pe));
         }
         return new ScoreHistogram(counts, edges);
     }

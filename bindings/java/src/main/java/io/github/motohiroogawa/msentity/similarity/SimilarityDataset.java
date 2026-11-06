@@ -21,8 +21,10 @@ import java.util.List;
  * A similarity result (one row per spectrum pair), as stored in .mssim files.
  *
  * <p>Columns: key columns (by-key results), {@code index1}, {@code index2} (positions in the input
- * datasets), {@code similarity} (the score of any method), and {@code data_index1} / {@code
- * data_index2} when the compared spectra are embedded. Cell values are {@code null}, {@link
+ * datasets), one score column per method ({@code cosine}, {@code reverse_cosine}, {@code
+ * modified_cosine}, {@code bonanza}; see {@link #scoreColumns}), {@code intensity_coverage1} /
+ * {@code intensity_coverage2}, and {@code data_index1} / {@code data_index2} when the compared
+ * spectra are embedded. Cell values are {@code null}, {@link
  * Boolean}, {@link Long}, {@link Double}, or {@link String}.
  *
  * <p>Close results with {@link #close} (or try-with-resources); unclosed results are released
@@ -243,32 +245,56 @@ public final class SimilarityDataset implements AutoCloseable {
 
   // ---- statistics -------------------------------------------------------------------------------
 
-  /** Summary of the score column; NaN statistics when empty. */
+  /** The score columns in table order, e.g. {@code [cosine, bonanza]}. */
+  public List<String> scoreColumns() {
+    try (Arena arena = Arena.ofConfined()) {
+      MemorySegment slot = arena.allocate(ADDRESS);
+      check(call(() -> (int) Native.scoreColumns.invoke(handle, slot)));
+      String text = Native.takeString(slot);
+      return text.isEmpty() ? List.of() : List.of(text.split(","));
+    }
+  }
+
+  /** Summary of a score column (missing scores left out); NaN statistics when empty. */
   public record ScoreSummary(
       long count, double mean, double q1, double median, double q3, double min, double max) {}
 
-  public ScoreSummary describeScores() {
+  /** Summary of {@code column}; null means the first score column. */
+  public ScoreSummary describeScores(String column) {
     try (Arena arena = Arena.ofConfined()) {
+      MemorySegment c = string(arena, column);
       MemorySegment out = arena.allocate(JAVA_DOUBLE, 7);
-      check(call(() -> (int) Native.describeScores.invoke(handle, out)));
+      check(call(() -> (int) Native.describeScores.invoke(handle, c, out)));
       double[] v = out.toArray(JAVA_DOUBLE);
       return new ScoreSummary((long) v[0], v[1], v[2], v[3], v[4], v[5], v[6]);
     }
   }
 
+  /** Summary of the first score column. */
+  public ScoreSummary describeScores() {
+    return describeScores(null);
+  }
+
   /** Score counts over [0, 1]; {@code edges} has {@code counts.length + 1} entries. */
   public record Histogram(long[] counts, double[] edges) {}
 
-  public Histogram histogram(int bins) {
+  /** Histogram of {@code column} (null = the first score column; missing scores left out). */
+  public Histogram histogram(String column, int bins) {
     if (bins < 1 || bins > 200) {
       throw new SimilarityException.InvalidArgument("bins must be between 1 and 200");
     }
     try (Arena arena = Arena.ofConfined()) {
+      MemorySegment c = string(arena, column);
       MemorySegment counts = arena.allocate(JAVA_LONG, bins);
       MemorySegment edges = arena.allocate(JAVA_DOUBLE, bins + 1);
-      check(call(() -> (int) Native.histogram.invoke(handle, bins, counts, edges)));
+      check(call(() -> (int) Native.histogram.invoke(handle, c, bins, counts, edges)));
       return new Histogram(counts.toArray(JAVA_LONG), edges.toArray(JAVA_DOUBLE));
     }
+  }
+
+  /** Histogram of the first score column. */
+  public Histogram histogram(int bins) {
+    return histogram(null, bins);
   }
 
   @Override

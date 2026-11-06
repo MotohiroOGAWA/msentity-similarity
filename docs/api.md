@@ -22,16 +22,20 @@ namespace sim = msentity::similarity;
 
 ```cpp
 sim::Options options;                       // defaults:
-options.method = sim::Method::Cosine;       //   Cosine or ReverseCosine
+options.methods = {sim::Method::Cosine};    //   one or more of Cosine, ReverseCosine,
+                                            //   ModifiedCosine, Bonanza (one column each)
 options.mz_tolerance_da = 0.01;             //   m/z tolerance in Da, >= 0 (0 = off)
 options.mz_tolerance_ppm = 10.0;            //   m/z tolerance in ppm, >= 0 (0 = off);
                                             //   peaks match within either, see similarity.md
 options.intensity_exponent = 1.0;           //   intensity^exponent before scoring, > 0
+options.precursor_column = "";              //   precursor m/z for ModifiedCosine/Bonanza;
+                                            //   "" = PrecursorMZ, precursor_mz, PEPMASS, ParentMZ
 options.threads = 0;                        //   0 = all hardware threads
 ```
 
-`sim::parse_method("reverse_cosine")` and `sim::method_name(Method::Cosine)`
-(`"cosine"`) convert to and from the names used in files and bindings. The
+`sim::parse_method("reverse_cosine")`, `sim::parse_methods("cosine,bonanza")`
+and `sim::method_name(Method::Cosine)` (`"cosine"`) convert to and from the
+names used for score columns, in files, and in bindings. The
 scores themselves are defined in [similarity.md](similarity.md).
 
 The tolerances can be given as text:
@@ -54,8 +58,8 @@ std::vector<float> scores = sim::pair_scores(ds, {0, 1}, ds, {1, 0});
 // scores = {0.759714, 0.759714}
 
 // Every pair, row-major len(ds1) × len(ds2)
-sim::Options reverse;
-reverse.method = sim::Method::ReverseCosine;
+sim::Options reverse;                        // pair_scores / all_pairs_matrix: one method
+reverse.methods = {sim::Method::ReverseCosine};
 std::vector<float> matrix = sim::all_pairs_matrix(ds, ds, reverse);
 // matrix = {1, 0.788097,      ← query 0 vs reference 0, 1
 //           0.759714, 1}      ← query 1 vs reference 0, 1
@@ -70,7 +74,7 @@ what you normally want.
 ```cpp
 sim::SimilarityDataset hits = sim::calculate_library_search(
     ds, ds,                    // query, reference
-    0.7,                       // keep pairs with score >= 0.7
+    0.7,                       // keep pairs where any method scores >= 0.7
     {},                        // Options
     true,                      // include_matched_data: embed the compared spectra
     "example.msp",             // query_source: recorded in the metadata
@@ -78,14 +82,14 @@ sim::SimilarityDataset hits = sim::calculate_library_search(
     [](int64_t done, int64_t total) {});  // optional progress callback
 
 hits.size();      // 4
-hits.columns();   // {"index1", "index2", "similarity", "intensity_coverage1",
+hits.columns();   // {"index1", "index2", "cosine", "intensity_coverage1",
                   //  "intensity_coverage2", "data_index1", "data_index2"}
 ```
 
 The result table:
 
 ```text
- index1  index2  similarity  intensity_coverage1  intensity_coverage2  data_index1  data_index2
+ index1  index2  cosine      intensity_coverage1  intensity_coverage2  data_index1  data_index2
       0       0  1.0         1.0                  1.0                            0            0
       0       1  0.759714    0.92927              1.0                            0            1
       1       0  0.759714    1.0                  0.92927                        1            0
@@ -93,18 +97,20 @@ The result table:
 ```
 
 * `index1` / `index2` — positions in the query / reference dataset.
-* `similarity` — the score of every method; the method is `parameters.method` in the metadata.
+* `cosine` (and `reverse_cosine`, `modified_cosine`, `bonanza` when selected) —
+  one score column per method (`hits.score_columns()`); null where a precursor
+  method lacks a precursor m/z.
 * `intensity_coverage1` / `intensity_coverage2` — share of each spectrum's
   squared (exponentiated) intensity carried by its matched peaks; the cosine
   never exceeds `sqrt(intensity_coverage1 · intensity_coverage2)`
-  ([similarity.md](similarity.md#5-intensity-coverage)).
+  ([similarity.md](similarity.md#8-intensity-coverage)).
 * `data_index1` / `data_index2` — rows of the embedded spectra (only with
   `include_matched_data`).
 
 Reading values and the compared spectra:
 
 ```cpp
-std::vector<Value> score = hits.column_values("similarity");
+std::vector<Value> score = hits.column_values("cosine");
 std::get<double>(score[1]);              // 0.759714
 
 auto [query, reference] = hits.match_records(1);   // two one-spectrum MSDatasets
@@ -127,10 +133,10 @@ for (std::size_t r = 0; r < i1.size(); ++r) mask.push_back(i1[r] != i2[r]);
 
 sim::SimilarityDataset different =
     hits.filter(mask)                                  // 2 rows; metadata row_count = 2,
-        .sort_by({"similarity"}, {false});      //   source_row_count = 4
+        .sort_by({"cosine"}, {false});          //   source_row_count = 4
                                                        // stable; missing values last
 
-sim::ScoreSummary s = hits.describe_scores();
+sim::ScoreSummary s = hits.describe_scores();   // or describe_scores("bonanza")
 // s.count = 4, s.mean = 0.879857, s.median = 0.879857, s.q1, s.q3, s.min, s.max
 // (quartiles by linear interpolation, as in NumPy/pandas)
 
@@ -153,7 +159,7 @@ hits.export_table("hits.csv");          // table only: .csv, .tsv, or .parquet
 `hits.csv`:
 
 ```text
-index1,index2,similarity,intensity_coverage1,intensity_coverage2,data_index1,data_index2
+index1,index2,cosine,intensity_coverage1,intensity_coverage2,data_index1,data_index2
 0,0,1.0,1.0,1.0,0,0
 0,1,0.7597143650054932,0.9292697906494141,1.0,0,1
 1,0,0.7597143650054932,1.0,0.9292697906494141,1,0
@@ -178,9 +184,9 @@ sim::SimilarityDataset by_key = sim::calculate_similarity(
     false,                 // include_matched_data (default false)
     "a.msds", "b.msds");   // sources for the metadata
 
-by_key.columns();          // {"SpecID", "index1", "index2", "similarity",
+by_key.columns();          // {"SpecID", "index1", "index2", "cosine",
                            //  "intensity_coverage1", "intensity_coverage2"}
-// SpecID index1 index2 similarity intensity_coverage1 intensity_coverage2
+// SpecID index1 index2 cosine     intensity_coverage1 intensity_coverage2
 // SP1         0      1  1.0        1.0                 1.0
 // SP2         1      0  1.0        1.0                 1.0
 ```
@@ -192,7 +198,7 @@ otherwise); an unknown key column throws `KeyError`.
 
 | Exception | When |
 |---|---|
-| `std::invalid_argument` | bad options (negative or non-finite tolerance, both tolerances 0, threshold outside [0, 1], unknown method), duplicate keys, invalid tables or metadata, wrong file extension |
+| `std::invalid_argument` | bad options (negative or non-finite tolerance, both tolerances 0, threshold outside [0, 1], unknown or no method, several methods for `pair_scores`), duplicate keys, invalid tables or metadata, wrong file extension |
 | `std::out_of_range` | a spectrum position or row out of range |
 | `msentity::KeyError` | unknown column |
 | `msentity::FormatError` | not an `.mssim` file, unsupported schema version, or the file cannot be opened or written (message starting with `HDF5 error: cannot open` / `cannot create`) |
@@ -211,7 +217,8 @@ $ mssim-tool info hits.mssim          # size, columns, metadata, score summary (
 $ mssim-tool export hits.mssim hits.tsv
 ```
 
-Options for `search` and `by-key`: `--method cosine|reverse_cosine`,
+Options for `search` and `by-key`: `--method M[,M...]` (`cosine`,
+`reverse_cosine`, `modified_cosine`, `bonanza`), `--precursor-column C`,
 `--mz-tolerance T` (`0.01Da,10ppm` by default, or e.g. `10ppm`, `0.01Da`), `--exponent E`,
 `--threads N`; `search` embeds the spectra
 unless `--lightweight` is given, `by-key` only with `--embed`.

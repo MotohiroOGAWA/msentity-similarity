@@ -20,11 +20,12 @@ internal struct NativeValue
 [StructLayout(LayoutKind.Sequential)]
 internal struct NativeOptions
 {
-    public int Method;
+    public int Methods;
     public int Threads;
     public double MzToleranceDa;
     public double MzTolerancePpm;
     public double IntensityExponent;
+    [MarshalAs(UnmanagedType.LPUTF8Str)] public string? PrecursorColumn;
 }
 
 /// <summary>void (*mssim_progress_fn)(int64_t done, int64_t total, void* user_data)</summary>
@@ -75,6 +76,8 @@ internal static class NativeMethods
     [DllImport(Library, CallingConvention = Cdecl)] public static extern unsafe void mssim_values_clear(NativeValue* values, long n);
     [DllImport(Library, CallingConvention = Cdecl)]
     public static extern int mssim_parse_mz_tolerance([MarshalAs(Utf8)] string text, ref NativeOptions options);
+    [DllImport(Library, CallingConvention = Cdecl)]
+    public static extern int mssim_parse_methods([MarshalAs(Utf8)] string text, ref NativeOptions options);
     [DllImport(Library, CallingConvention = Cdecl)]
     public static extern int mssim_format_mz_tolerance(in NativeOptions options, out IntPtr text);
 
@@ -129,9 +132,13 @@ internal static class NativeMethods
     public static extern unsafe int mssim_sort_by(ResultHandle result, IntPtr* columns, int* ascending, long n,
         out ResultHandle output);
     [DllImport(Library, CallingConvention = Cdecl)]
-    public static extern unsafe int mssim_describe_scores(ResultHandle result, double* output);
+    public static extern int mssim_score_columns(ResultHandle result, out IntPtr columns);
     [DllImport(Library, CallingConvention = Cdecl)]
-    public static extern unsafe int mssim_histogram(ResultHandle result, int bins, long* counts, double* edges);
+    public static extern unsafe int mssim_describe_scores(ResultHandle result, [MarshalAs(Utf8)] string? column,
+        double* output);
+    [DllImport(Library, CallingConvention = Cdecl)]
+    public static extern unsafe int mssim_histogram(ResultHandle result, [MarshalAs(Utf8)] string? column, int bins,
+        long* counts, double* edges);
     [DllImport(Library, CallingConvention = Cdecl)]
     public static extern int mssim_export_table(ResultHandle result, [MarshalAs(Utf8)] string path);
 

@@ -5,9 +5,11 @@
 //   mssim-tool info <input.mssim>                         size, columns, metadata, scores as JSON
 //   mssim-tool export <input.mssim> <output.csv|.tsv|.parquet>
 //
-// search and by-key also take [--method cosine|reverse_cosine] [--mz-tolerance T]
-// [--exponent E] [--threads N], with T such as 0.01Da,10ppm (the default), 10ppm,
-// or 0.01Da. Inputs are any format msentity reads (.msp, .mgf, .msds, .tsv, .csv).
+// search and by-key also take [--method M[,M...]] [--mz-tolerance T]
+// [--exponent E] [--precursor-column C] [--threads N], with M of cosine,
+// reverse_cosine, modified_cosine, bonanza (one score column each) and T such as
+// 0.01Da,10ppm (the default), 10ppm, or 0.01Da. Inputs are any format msentity
+// reads (.msp, .mgf, .msds, .tsv, .csv).
 
 #include <iostream>
 #include <nlohmann/json.hpp>
@@ -29,7 +31,9 @@ int usage() {
                "  mssim-tool info <input.mssim>\n"
                "  mssim-tool export <input.mssim> <output.csv|.tsv|.parquet>\n"
                "options for search and by-key:\n"
-               "  --method cosine|reverse_cosine  --mz-tolerance T  --exponent E  --threads N\n"
+               "  --method M[,M...]  --mz-tolerance T  --exponent E  --precursor-column C  --threads N\n"
+               "  (M: cosine (default), reverse_cosine, modified_cosine, bonanza; the last two need\n"
+               "   a precursor m/z, from C or PrecursorMZ/precursor_mz/PEPMASS/ParentMZ)\n"
                "  (T: 0.01Da,10ppm (default), 10ppm, or 0.01Da; peaks match within either)\n";
   return 2;
 }
@@ -44,10 +48,12 @@ ordered_json info_json(const sim::SimilarityDataset& result) {
                             result.matched_datasets()->second.size()};
   }
   out["metadata"] = ordered_json::parse(result.metadata_json());
-  if (result.size() > 0) {
-    auto s = result.describe_scores();
-    out["scores"] = {{"count", s.count}, {"mean", s.mean},     {"q1", s.q1}, {"median", s.median},
-                     {"q3", s.q3},       {"min", s.min},       {"max", s.max}};
+  out["scores"] = ordered_json::object();
+  for (const auto& column : result.score_columns()) {
+    auto s = result.describe_scores(column);
+    if (s.count == 0) continue;
+    out["scores"][column] = {{"count", s.count}, {"mean", s.mean}, {"q1", s.q1}, {"median", s.median},
+                             {"q3", s.q3},       {"min", s.min},   {"max", s.max}};
   }
   return out;
 }
@@ -71,7 +77,9 @@ int main(int argc, char** argv) {
       if (args[i] == "--threshold" && has_value) {
         threshold = std::stod(args[++i]);
       } else if (args[i] == "--method" && has_value) {
-        options.method = sim::parse_method(args[++i]);
+        options.methods = sim::parse_methods(args[++i]);
+      } else if (args[i] == "--precursor-column" && has_value) {
+        options.precursor_column = args[++i];
       } else if (args[i] == "--mz-tolerance" && has_value) {
         auto tolerance = sim::parse_mz_tolerance(args[++i]);
         options.mz_tolerance_da = tolerance.da;

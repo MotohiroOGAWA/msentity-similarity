@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <iomanip>
 #include <limits>
 #include <locale>
@@ -20,6 +21,8 @@ namespace msentity::similarity {
 
 namespace {
 
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
 // A peak that can be matched; peaks with zero intensity (after clipping) or a
 // non-finite m/z cannot contribute to a score and are left out.
 struct Peak {
@@ -28,11 +31,14 @@ struct Peak {
   int64_t original_index;
 };
 
-// Peaks sorted by m/z (original order among equal m/z) and the squared norm
-// of all intensities.
+// Peaks sorted by m/z (original order among equal m/z), the squared norm and
+// the sum of all intensities, and the precursor m/z (NaN when unknown).
 struct PreparedSpectrum {
   std::vector<Peak> peaks;
   double norm = 0.0;
+  double total = 0.0;
+  double unlisted_square = 0.0;  // Σ intensity² of positive peaks left out (no finite m/z)
+  double precursor = kNaN;
 };
 
 void validate_mz_tolerance(double da, double ppm) {
@@ -53,6 +59,11 @@ void validate(const Options& options) {
     throw std::invalid_argument("intensity_exponent must be positive");
   }
   if (options.threads < 0) throw std::invalid_argument("threads must be >= 0");
+  if (options.methods.empty()) throw std::invalid_argument("methods must not be empty");
+}
+
+bool any_precursor_method(const std::vector<Method>& methods) {
+  return std::any_of(methods.begin(), methods.end(), needs_precursor);
 }
 
 PreparedSpectrum prepare_spectrum(const Spectrum& spectrum, const Options& options) {
@@ -64,11 +75,66 @@ PreparedSpectrum prepare_spectrum(const Spectrum& spectrum, const Options& optio
       intensity = std::pow(intensity, options.intensity_exponent);
     }
     result.norm += intensity * intensity;
+    result.total += intensity;
     double mz = spectrum.mz(i);
-    if (intensity > 0 && std::isfinite(mz)) result.peaks.push_back({mz, intensity, i});
+    if (intensity > 0 && std::isfinite(mz)) {
+      result.peaks.push_back({mz, intensity, i});
+    } else {
+      result.unlisted_square += intensity * intensity;
+    }
   }
   std::stable_sort(result.peaks.begin(), result.peaks.end(),
                    [](const Peak& a, const Peak& b) { return a.mz < b.mz; });
+  return result;
+}
+
+std::string lower(std::string text) {
+  std::transform(text.begin(), text.end(), text.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return text;
+}
+
+// A positive precursor m/z from a metadata value, or NaN.
+double precursor_value(const Value& value) {
+  double mz = kNaN;
+  if (const auto* d = std::get_if<double>(&value)) mz = *d;
+  if (const auto* i = std::get_if<int64_t>(&value)) mz = static_cast<double>(*i);
+  if (const auto* s = std::get_if<std::string>(&value)) {
+    // Leading number of the text ("301.1 1000"), read in the C locale.
+    std::istringstream in(*s);
+    in.imbue(std::locale::classic());
+    double parsed;
+    if (in >> parsed) mz = parsed;
+  }
+  return std::isfinite(mz) && mz > 0 ? mz : kNaN;
+}
+
+// Precursor m/z of every row of dataset (NaN when unknown): from
+// options.precursor_column, or the first of precursor_columns() that has one.
+std::vector<double> precursors(const MSDataset& dataset, const Options& options) {
+  std::vector<double> result(static_cast<std::size_t>(dataset.size()), kNaN);
+  std::vector<std::string> names;
+  if (!options.precursor_column.empty()) {
+    if (!dataset.has_column(options.precursor_column)) {
+      throw KeyError("precursor column not found: " + options.precursor_column);
+    }
+    names.push_back(options.precursor_column);
+  } else {
+    for (const auto& wanted : precursor_columns()) {
+      for (const auto& column : dataset.columns()) {
+        if (lower(column) == lower(wanted)) {
+          names.push_back(column);
+          break;
+        }
+      }
+    }
+  }
+  for (const auto& name : names) {
+    auto values = dataset.column_values(name);
+    for (std::size_t i = 0; i < result.size(); ++i) {
+      if (std::isnan(result[i])) result[i] = precursor_value(values[i]);
+    }
+  }
   return result;
 }
 
@@ -113,87 +179,151 @@ struct Candidate {
   uint32_t second;
 };
 
-// The score of a pair and the intensity coverage of each side: the share of
-// the spectrum's squared norm (Σ intensity^(2·exponent)) carried by its
-// matched peaks. cosine <= sqrt(coverage1 · coverage2) by Cauchy–Schwarz.
+// Scores of a pair (NaN: not calculated or not available) and the intensity
+// coverage of each side under the direct pairing.
 struct Scored {
-  float similarity = 0.0f;
-  float coverage1 = 0.0f;
-  float coverage2 = 0.0f;
+  double cosine = kNaN;
+  double reverse_cosine = kNaN;
+  double modified_cosine = kNaN;
+  double bonanza = kNaN;
+  double coverage1 = 0.0;
+  double coverage2 = 0.0;
+
+  double get(Method method) const {
+    switch (method) {
+      case Method::Cosine: return cosine;
+      case Method::ReverseCosine: return reverse_cosine;
+      case Method::ModifiedCosine: return modified_cosine;
+      case Method::Bonanza: return bonanza;
+    }
+    return kNaN;
+  }
 };
 
-float clip_unit(double value) {
+double clip_unit(double value) {
   if (!(value >= 0.0)) value = std::isnan(value) ? value : 0.0;  // keep NaN, clip negatives
   if (value > 1.0) value = 1.0;
-  return static_cast<float>(value);
+  return value;
 }
 
-// Peaks are paired one-to-one: candidate pairs within tolerance are taken in
-// order of increasing m/z difference (ties: original peak order of the first,
-// then the second spectrum), skipping pairs whose peaks are already used.
-Scored score_pair(const PreparedSpectrum& a, const PreparedSpectrum& b, const Tolerance& tolerance,
-                  Method method) {
-  // Per-thread buffers: scoring a pair allocates nothing once they have grown.
-  thread_local std::vector<Candidate> candidates;
-  thread_local std::vector<char> used_a, used_b;
-  candidates.clear();
-
-  if (a.peaks.empty() || b.peaks.empty()) return {};
-  if (tolerance.window(a.peaks.back().mz).second < b.peaks.front().mz ||
-      tolerance.window(a.peaks.front().mz).first > b.peaks.back().mz) {
-    return {};  // m/z ranges too far apart
+// Candidate pairs of a with b shifted by offset (a.mz ≈ b.mz + offset),
+// appended to candidates; difference = |a.mz - (b.mz + offset)|.
+void collect(const PreparedSpectrum& a, const PreparedSpectrum& b, double offset,
+             const Tolerance& tolerance, std::vector<Candidate>& candidates) {
+  if (a.peaks.empty() || b.peaks.empty()) return;
+  if (tolerance.window(a.peaks.back().mz).second < b.peaks.front().mz + offset ||
+      tolerance.window(a.peaks.front().mz).first > b.peaks.back().mz + offset) {
+    return;  // m/z ranges too far apart
   }
   std::size_t start = 0;
   for (std::size_t i = 0; i < a.peaks.size(); ++i) {
     double mz = a.peaks[i].mz;
-    auto [lower, upper] = tolerance.window(mz);
-    while (start < b.peaks.size() && b.peaks[start].mz < lower) ++start;
-    for (std::size_t j = start; j < b.peaks.size() && b.peaks[j].mz <= upper; ++j) {
-      if (tolerance.matches(mz, b.peaks[j].mz)) {
-        candidates.push_back({std::abs(mz - b.peaks[j].mz), static_cast<uint32_t>(i),
+    auto [low, high] = tolerance.window(mz);
+    while (start < b.peaks.size() && b.peaks[start].mz + offset < low) ++start;
+    for (std::size_t j = start; j < b.peaks.size() && b.peaks[j].mz + offset <= high; ++j) {
+      double shifted = b.peaks[j].mz + offset;
+      if (tolerance.matches(mz, shifted)) {
+        candidates.push_back({std::abs(mz - shifted), static_cast<uint32_t>(i),
                               static_cast<uint32_t>(j)});
       }
     }
   }
-  if (candidates.empty()) return {};
+}
+
+// Sums over one-to-one pairs chosen from candidates.
+struct Pairing {
+  double dot = 0.0;
+  double matched_norm_a = 0.0, matched_norm_b = 0.0;
+  double bonanza_unmatched = 0.0;                        // Σ p² + Σ q² of unmatched peaks
+  double bonanza_dot = 0.0;                              // Σ p·q
+};
+
+// Pairs are taken in order of increasing m/z difference (ties: original peak
+// order of the first, then the second spectrum), skipping pairs whose peaks
+// are already used.
+Pairing pair_peaks(const PreparedSpectrum& a, const PreparedSpectrum& b,
+                   std::vector<Candidate>& candidates, bool bonanza) {
+  thread_local std::vector<char> used_a, used_b;
   std::sort(candidates.begin(), candidates.end(), [&](const Candidate& x, const Candidate& y) {
     if (x.difference != y.difference) return x.difference < y.difference;
     if (x.first != y.first) return a.peaks[x.first].original_index < a.peaks[y.first].original_index;
     return b.peaks[x.second].original_index < b.peaks[y.second].original_index;
   });
-
   used_a.assign(a.peaks.size(), 0);
   used_b.assign(b.peaks.size(), 0);
-  double dot = 0.0;
-  double matched_norm_a = 0.0;
-  double matched_norm_b = 0.0;
+  Pairing result;
   for (const auto& candidate : candidates) {
     if (used_a[candidate.first] || used_b[candidate.second]) continue;
     used_a[candidate.first] = used_b[candidate.second] = 1;
-    double intensity_a = a.peaks[candidate.first].intensity;
-    double intensity_b = b.peaks[candidate.second].intensity;
-    dot += intensity_a * intensity_b;
-    matched_norm_a += intensity_a * intensity_a;
-    matched_norm_b += intensity_b * intensity_b;
+    double x = a.peaks[candidate.first].intensity;
+    double y = b.peaks[candidate.second].intensity;
+    result.dot += x * y;
+    result.matched_norm_a += x * x;
+    result.matched_norm_b += y * y;
   }
-  double norm_a = method == Method::ReverseCosine ? matched_norm_a : a.norm;
-  double denominator = std::sqrt(norm_a * b.norm);
-  Scored result;
-  result.similarity = clip_unit(denominator > 0 ? dot / denominator : 0.0);
-  result.coverage1 = clip_unit(a.norm > 0 ? matched_norm_a / a.norm : 0.0);
-  result.coverage2 = clip_unit(b.norm > 0 ? matched_norm_b / b.norm : 0.0);
+  if (bonanza && a.total > 0 && b.total > 0) {
+    for (std::size_t i = 0; i < a.peaks.size(); ++i) {
+      double p = a.peaks[i].intensity / a.total;
+      if (!used_a[i]) result.bonanza_unmatched += p * p;
+    }
+    for (std::size_t j = 0; j < b.peaks.size(); ++j) {
+      double q = b.peaks[j].intensity / b.total;
+      if (!used_b[j]) result.bonanza_unmatched += q * q;
+    }
+    result.bonanza_unmatched += a.unlisted_square / (a.total * a.total) +
+                                b.unlisted_square / (b.total * b.total);
+    result.bonanza_dot = result.dot / (a.total * b.total);
+  }
   return result;
 }
 
-float score(const PreparedSpectrum& a, const PreparedSpectrum& b, const Tolerance& tolerance,
-            Method method) {
-  return score_pair(a, b, tolerance, method).similarity;
+// Scores of the selected methods for one pair.
+Scored score_pair(const PreparedSpectrum& a, const PreparedSpectrum& b, const Tolerance& tolerance,
+                  const std::vector<Method>& methods) {
+  // Per-thread buffers: scoring a pair allocates nothing once they have grown.
+  thread_local std::vector<Candidate> candidates;
+  auto wanted = [&](Method m) { return std::find(methods.begin(), methods.end(), m) != methods.end(); };
+  Scored result;
+
+  // Direct pairing: cosine, reverse cosine, and the coverages.
+  candidates.clear();
+  collect(a, b, 0.0, tolerance, candidates);
+  Pairing direct = pair_peaks(a, b, candidates, false);
+  double denominator = std::sqrt(a.norm * b.norm);
+  if (wanted(Method::Cosine)) result.cosine = clip_unit(denominator > 0 ? direct.dot / denominator : 0.0);
+  if (wanted(Method::ReverseCosine)) {
+    double reverse = std::sqrt(direct.matched_norm_a * b.norm);
+    result.reverse_cosine = clip_unit(reverse > 0 ? direct.dot / reverse : 0.0);
+  }
+  result.coverage1 = clip_unit(a.norm > 0 ? direct.matched_norm_a / a.norm : 0.0);
+  result.coverage2 = clip_unit(b.norm > 0 ? direct.matched_norm_b / b.norm : 0.0);
+
+  // Direct and precursor-shifted pairing: modified cosine and BONANZA.
+  bool modified = wanted(Method::ModifiedCosine), bonanza = wanted(Method::Bonanza);
+  if ((modified || bonanza) && std::isfinite(a.precursor) && std::isfinite(b.precursor)) {
+    candidates.clear();
+    collect(a, b, 0.0, tolerance, candidates);
+    double shift = a.precursor - b.precursor;
+    if (shift != 0.0) collect(a, b, shift, tolerance, candidates);
+    Pairing shifted = pair_peaks(a, b, candidates, bonanza);
+    if (modified) result.modified_cosine = clip_unit(denominator > 0 ? shifted.dot / denominator : 0.0);
+    if (bonanza) {
+      double total = shifted.bonanza_dot + shifted.bonanza_unmatched;
+      result.bonanza = clip_unit(total > 0 ? shifted.bonanza_dot / total : 0.0);
+    }
+  }
+  return result;
 }
 
-std::vector<PreparedSpectrum> prepare_all(const MSDataset& dataset, const Options& options) {
+std::vector<PreparedSpectrum> prepare_all(const MSDataset& dataset, const Options& options,
+                                          const std::vector<Method>& methods) {
   std::vector<PreparedSpectrum> prepared(static_cast<std::size_t>(dataset.size()));
+  std::vector<double> precursor;
+  if (any_precursor_method(methods)) precursor = precursors(dataset, options);
   for (int64_t i = 0; i < dataset.size(); ++i) {
-    prepared[static_cast<std::size_t>(i)] = prepare_spectrum(dataset.peaks().spectrum(i), options);
+    auto& spectrum = prepared[static_cast<std::size_t>(i)];
+    spectrum = prepare_spectrum(dataset.peaks().spectrum(i), options);
+    if (!precursor.empty()) spectrum.precursor = precursor[static_cast<std::size_t>(i)];
   }
   return prepared;
 }
@@ -251,22 +381,97 @@ std::shared_ptr<arrow::Array> int64_array(const std::vector<int64_t>& values) {
   return internal::unwrap(builder.Finish());
 }
 
-std::shared_ptr<arrow::Array> float_array(const std::vector<float>& values) {
+// float32 values; NaN becomes null.
+std::shared_ptr<arrow::Array> float_array(const std::vector<double>& values) {
   arrow::FloatBuilder builder;
-  internal::check(builder.AppendValues(values));
+  internal::check(builder.Reserve(static_cast<int64_t>(values.size())));
+  for (double value : values) {
+    if (std::isnan(value)) {
+      builder.UnsafeAppendNull();
+    } else {
+      builder.UnsafeAppend(static_cast<float>(value));
+    }
+  }
   return internal::unwrap(builder.Finish());
+}
+
+// Result columns of scored pairs: one per method, then the coverages.
+void add_score_columns(const std::vector<Scored>& scored, const std::vector<Method>& methods,
+                       std::vector<std::shared_ptr<arrow::Field>>& fields,
+                       std::vector<std::shared_ptr<arrow::Array>>& arrays) {
+  auto add = [&](const std::string& name, const std::vector<double>& values) {
+    auto array = float_array(values);
+    fields.push_back(arrow::field(name, arrow::float32()));
+    arrays.push_back(array);
+  };
+  for (Method method : methods) {
+    std::vector<double> values;
+    values.reserve(scored.size());
+    for (const auto& s : scored) values.push_back(s.get(method));
+    add(method_name(method), values);
+  }
+  std::vector<double> coverage1, coverage2;
+  for (const auto& s : scored) {
+    coverage1.push_back(s.coverage1);
+    coverage2.push_back(s.coverage2);
+  }
+  add("intensity_coverage1", coverage1);
+  add("intensity_coverage2", coverage2);
+}
+
+// Only method of options, for the single-score functions.
+std::vector<Method> single_method(const Options& options) {
+  auto methods = selected_methods(options);
+  if (methods.size() != 1) {
+    throw std::invalid_argument("pair_scores and all_pairs_matrix need exactly one method");
+  }
+  return methods;
 }
 
 }  // namespace
 
+const std::vector<Method>& all_methods() {
+  static const std::vector<Method> methods = {Method::Cosine, Method::ReverseCosine,
+                                              Method::ModifiedCosine, Method::Bonanza};
+  return methods;
+}
+
 std::string method_name(Method method) {
-  return method == Method::Cosine ? "cosine" : "reverse_cosine";
+  switch (method) {
+    case Method::Cosine: return "cosine";
+    case Method::ReverseCosine: return "reverse_cosine";
+    case Method::ModifiedCosine: return "modified_cosine";
+    case Method::Bonanza: return "bonanza";
+  }
+  throw std::invalid_argument("unknown method");
 }
 
 Method parse_method(const std::string& name) {
-  if (name == "cosine") return Method::Cosine;
-  if (name == "reverse_cosine") return Method::ReverseCosine;
-  throw std::invalid_argument("method must be 'cosine' or 'reverse_cosine'");
+  for (Method method : all_methods()) {
+    if (method_name(method) == name) return method;
+  }
+  throw std::invalid_argument(
+      "method must be 'cosine', 'reverse_cosine', 'modified_cosine', or 'bonanza', got '" + name + "'");
+}
+
+bool needs_precursor(Method method) {
+  return method == Method::ModifiedCosine || method == Method::Bonanza;
+}
+
+const std::vector<std::string>& precursor_columns() {
+  static const std::vector<std::string> names = {"PrecursorMZ", "precursor_mz", "PEPMASS", "ParentMZ"};
+  return names;
+}
+
+std::vector<Method> selected_methods(const Options& options) {
+  if (options.methods.empty()) throw std::invalid_argument("methods must not be empty");
+  std::vector<Method> result;
+  for (Method method : all_methods()) {
+    if (std::find(options.methods.begin(), options.methods.end(), method) != options.methods.end()) {
+      result.push_back(method);
+    }
+  }
+  return result;
 }
 
 namespace {
@@ -344,13 +549,25 @@ std::string format_mz_tolerance(double da, double ppm) {
   return text;
 }
 
-namespace {
+std::vector<Method> parse_methods(const std::string& names) {
+  std::vector<Method> methods;
+  std::size_t start = 0;
+  while (true) {
+    std::size_t comma = names.find(',', start);
+    std::string name = trim(names.substr(start, comma == std::string::npos ? comma : comma - start));
+    Method method = parse_method(name);
+    if (std::find(methods.begin(), methods.end(), method) == methods.end()) methods.push_back(method);
+    if (comma == std::string::npos) break;
+    start = comma + 1;
+  }
+  return methods;
+}
 
-// Score and intensity coverages of ds1[index1[k]] vs ds2[index2[k]].
-std::vector<Scored> pair_details(const MSDataset& ds1, const std::vector<int64_t>& index1,
-                                 const MSDataset& ds2, const std::vector<int64_t>& index2,
-                                 const Options& options) {
+std::vector<float> pair_scores(const MSDataset& ds1, const std::vector<int64_t>& index1,
+                               const MSDataset& ds2, const std::vector<int64_t>& index2,
+                               const Options& options) {
   validate(options);
+  const auto methods = single_method(options);
   if (index1.size() != index2.size()) {
     throw std::invalid_argument("index1 and index2 must have the same length");
   }
@@ -359,10 +576,14 @@ std::vector<Scored> pair_details(const MSDataset& ds1, const std::vector<int64_t
 
   // Prepare only the spectra that are used.
   auto prepare_used = [&](const MSDataset& dataset, const std::vector<int64_t>& index) {
+    std::vector<double> precursor;
+    if (any_precursor_method(methods)) precursor = precursors(dataset, options);
     std::unordered_map<int64_t, PreparedSpectrum> prepared;
     for (int64_t position : index) {
       if (prepared.count(position) == 0) {
-        prepared.emplace(position, prepare_spectrum(dataset.peaks().spectrum(position), options));
+        auto spectrum = prepare_spectrum(dataset.peaks().spectrum(position), options);
+        if (!precursor.empty()) spectrum.precursor = precursor[static_cast<std::size_t>(position)];
+        prepared.emplace(position, std::move(spectrum));
       }
     }
     return prepared;
@@ -372,43 +593,34 @@ std::vector<Scored> pair_details(const MSDataset& ds1, const std::vector<int64_t
   const Tolerance tolerance(options);
 
   const int64_t n = static_cast<int64_t>(index1.size());
-  std::vector<Scored> scores(static_cast<std::size_t>(n));
+  std::vector<float> scores(static_cast<std::size_t>(n));
   parallel_ranges(n, thread_count(options, n), [&](int64_t begin, int64_t end) {
     for (int64_t k = begin; k < end; ++k) {
       auto u = static_cast<std::size_t>(k);
-      scores[u] = score_pair(prepared1.at(index1[u]), prepared2.at(index2[u]), tolerance,
-                             options.method);
+      scores[u] = static_cast<float>(
+          score_pair(prepared1.at(index1[u]), prepared2.at(index2[u]), tolerance, methods)
+              .get(methods.front()));
     }
   });
-  return scores;
-}
-
-}  // namespace
-
-std::vector<float> pair_scores(const MSDataset& ds1, const std::vector<int64_t>& index1,
-                               const MSDataset& ds2, const std::vector<int64_t>& index2,
-                               const Options& options) {
-  auto details = pair_details(ds1, index1, ds2, index2, options);
-  std::vector<float> scores;
-  scores.reserve(details.size());
-  for (const auto& detail : details) scores.push_back(detail.similarity);
   return scores;
 }
 
 std::vector<float> all_pairs_matrix(const MSDataset& ds1, const MSDataset& ds2,
                                     const Options& options) {
   validate(options);
-  auto prepared1 = prepare_all(ds1, options);
-  auto prepared2 = prepare_all(ds2, options);
+  const auto methods = single_method(options);
+  auto prepared1 = prepare_all(ds1, options, methods);
+  auto prepared2 = prepare_all(ds2, options, methods);
   const Tolerance tolerance(options);
   const int64_t n1 = ds1.size(), n2 = ds2.size();
   std::vector<float> matrix(static_cast<std::size_t>(n1 * n2));
   parallel_ranges(n1, thread_count(options, n1 * n2), [&](int64_t begin, int64_t end) {
     for (int64_t i = begin; i < end; ++i) {
       for (int64_t j = 0; j < n2; ++j) {
-        matrix[static_cast<std::size_t>(i * n2 + j)] =
-            score(prepared1[static_cast<std::size_t>(i)], prepared2[static_cast<std::size_t>(j)],
-                  tolerance, options.method);
+        matrix[static_cast<std::size_t>(i * n2 + j)] = static_cast<float>(
+            score_pair(prepared1[static_cast<std::size_t>(i)], prepared2[static_cast<std::size_t>(j)],
+                       tolerance, methods)
+                .get(methods.front()));
       }
     }
   });
@@ -420,14 +632,17 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
                                                 const std::string& key2,
                                                 const Options& options) {
   validate(options);
+  const auto methods = selected_methods(options);
   if (!ds1.has_column(key1)) throw KeyError("ds1 does not contain key column: " + key1);
   if (!ds2.has_column(key2)) throw KeyError("ds2 does not contain key column: " + key2);
+  std::vector<std::string> reserved = {"index1", "index2", "similarity", "intensity_coverage1",
+                                       "intensity_coverage2"};
+  for (Method method : all_methods()) reserved.push_back(method_name(method));
   for (const auto& key : {key1, key2}) {
-    if (key == "index1" || key == "index2" || key == "similarity" ||
-        key == "intensity_coverage1" || key == "intensity_coverage2") {
-      throw std::invalid_argument(
-          "Key column names must not collide with result columns: index1, index2, "
-          "similarity, intensity_coverage1, intensity_coverage2");
+    if (std::find(reserved.begin(), reserved.end(), key) != reserved.end()) {
+      std::string list;
+      for (const auto& name : reserved) list += (list.empty() ? "" : ", ") + name;
+      throw std::invalid_argument("Key column names must not collide with result columns: " + list);
     }
   }
   auto values1 = ds1.column_values(key1);
@@ -474,13 +689,28 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
     matched1.push_back(values1[i]);
     matched2.push_back(values2[static_cast<std::size_t>(it->second)]);
   }
-  auto details = pair_details(ds1, index1, ds2, index2, options);
-  std::vector<float> scores, coverage1, coverage2;
-  for (const auto& detail : details) {
-    scores.push_back(detail.similarity);
-    coverage1.push_back(detail.coverage1);
-    coverage2.push_back(detail.coverage2);
+
+  // Score the pairs, preparing each used spectrum once.
+  std::vector<double> precursor1, precursor2;
+  if (any_precursor_method(methods)) {
+    precursor1 = precursors(ds1, options);
+    precursor2 = precursors(ds2, options);
   }
+  const Tolerance tolerance(options);
+  const int64_t n = static_cast<int64_t>(index1.size());
+  std::vector<Scored> scored(static_cast<std::size_t>(n));
+  parallel_ranges(n, thread_count(options, n), [&](int64_t begin, int64_t end) {
+    for (int64_t k = begin; k < end; ++k) {
+      auto u = static_cast<std::size_t>(k);
+      auto a = prepare_spectrum(ds1.peaks().spectrum(index1[u]), options);
+      auto b = prepare_spectrum(ds2.peaks().spectrum(index2[u]), options);
+      if (!precursor1.empty()) {
+        a.precursor = precursor1[static_cast<std::size_t>(index1[u])];
+        b.precursor = precursor2[static_cast<std::size_t>(index2[u])];
+      }
+      scored[u] = score_pair(a, b, tolerance, methods);
+    }
+  });
 
   std::vector<std::shared_ptr<arrow::Field>> fields;
   std::vector<std::shared_ptr<arrow::Array>> arrays;
@@ -492,24 +722,31 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
   if (key2 != key1) add(key2, internal::values_to_array(matched2));
   add("index1", int64_array(index1));
   add("index2", int64_array(index2));
-  add("similarity", float_array(scores));
-  add("intensity_coverage1", float_array(coverage1));
-  add("intensity_coverage2", float_array(coverage2));
-  return arrow::Table::Make(arrow::schema(fields), arrays, static_cast<int64_t>(index1.size()));
+  add_score_columns(scored, methods, fields, arrays);
+  return arrow::Table::Make(arrow::schema(fields), arrays, n);
 }
 
 std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDataset& reference,
                                              double threshold, const Options& options,
                                              const ProgressCallback& progress) {
   validate(options);
+  const auto methods = selected_methods(options);
   if (!std::isfinite(threshold) || threshold < 0 || threshold > 1) {
     throw std::invalid_argument("threshold must be a finite value between 0 and 1");
   }
   const int64_t n_query = query.size(), n_reference = reference.size();
   const int64_t total = n_query * n_reference;
-  auto prepared_query = prepare_all(query, options);
-  auto prepared_reference = prepare_all(reference, options);
+  auto prepared_query = prepare_all(query, options, methods);
+  auto prepared_reference = prepare_all(reference, options, methods);
   const Tolerance tolerance(options);
+  // Scores are stored as float32: compare them as stored.
+  auto kept = [&](const Scored& s) {
+    for (Method method : methods) {
+      double value = s.get(method);
+      if (!std::isnan(value) && static_cast<float>(value) >= threshold) return true;
+    }
+    return false;
+  };
 
   // Hits of each query row, filled in parallel, joined in order.
   std::vector<std::vector<std::pair<int64_t, Scored>>> hits(static_cast<std::size_t>(n_query));
@@ -523,9 +760,8 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
         auto& row = hits[static_cast<std::size_t>(q)];
         for (int64_t r = 0; r < n_reference; ++r) {
           Scored s = score_pair(prepared_query[static_cast<std::size_t>(q)],
-                                prepared_reference[static_cast<std::size_t>(r)], tolerance,
-                                options.method);
-          if (s.similarity >= threshold) row.emplace_back(r, s);
+                                prepared_reference[static_cast<std::size_t>(r)], tolerance, methods);
+          if (kept(s)) row.emplace_back(r, s);
         }
       }
     });
@@ -533,24 +769,19 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
   }
 
   std::vector<int64_t> index1, index2;
-  std::vector<float> scores, coverage1, coverage2;
+  std::vector<Scored> scored;
   for (int64_t q = 0; q < n_query; ++q) {
     for (const auto& [r, s] : hits[static_cast<std::size_t>(q)]) {
       index1.push_back(q);
       index2.push_back(r);
-      scores.push_back(s.similarity);
-      coverage1.push_back(s.coverage1);
-      coverage2.push_back(s.coverage2);
+      scored.push_back(s);
     }
   }
-  return arrow::Table::Make(
-      arrow::schema({arrow::field("index1", arrow::int64()), arrow::field("index2", arrow::int64()),
-                     arrow::field("similarity", arrow::float32()),
-                     arrow::field("intensity_coverage1", arrow::float32()),
-                     arrow::field("intensity_coverage2", arrow::float32())}),
-      {int64_array(index1), int64_array(index2), float_array(scores), float_array(coverage1),
-       float_array(coverage2)},
-      static_cast<int64_t>(scores.size()));
+  std::vector<std::shared_ptr<arrow::Field>> fields = {arrow::field("index1", arrow::int64()),
+                                                       arrow::field("index2", arrow::int64())};
+  std::vector<std::shared_ptr<arrow::Array>> arrays = {int64_array(index1), int64_array(index2)};
+  add_score_columns(scored, methods, fields, arrays);
+  return arrow::Table::Make(arrow::schema(fields), arrays, static_cast<int64_t>(scored.size()));
 }
 
 }  // namespace msentity::similarity

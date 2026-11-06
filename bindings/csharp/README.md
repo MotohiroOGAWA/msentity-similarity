@@ -5,8 +5,10 @@
 ```csharp
 using var ds = Dataset.Load("example.msp");
 using var hits = SpectrumSimilarity.LibrarySearch(ds, ds, threshold: 0.7);
-hits["similarity"];   // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
+hits["cosine"];       // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
 hits.Save("hits.mssim");
+// More scores, one column each (ModifiedCosine / Bonanza need a precursor m/z):
+new SimilarityOptions(Methods: SimilarityMethod.Cosine | SimilarityMethod.Bonanza);
 ```
 
 | | |

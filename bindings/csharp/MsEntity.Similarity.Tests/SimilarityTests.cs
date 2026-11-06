@@ -36,7 +36,7 @@ public class SimilarityTests
         Assert.Equal(5, matrix.GetLength(0));
         for (int j = 0; j < 5; j++) Assert.Equal(Row0[j], matrix[0, j], 1e-6f);
         var scores = SpectrumSimilarity.PairScores(ds, new long[] { 0, 2 }, ds, new long[] { 1, 4 },
-            new SimilarityOptions(Method: SimilarityMethod.ReverseCosine));
+            new SimilarityOptions(Methods: SimilarityMethod.ReverseCosine));
         Assert.Equal(0.7586880922317505f, scores[0], 1e-6f);
         Assert.Equal(0.31010058522224426f, scores[1], 1e-6f);
         // ppm only (0 Da turns the Da rule off).
@@ -59,11 +59,13 @@ public class SimilarityTests
             progress: (done, total) => { lastDone = done; lastTotal = total; });
         Assert.Equal((25L, 25L), (lastDone, lastTotal));
         Assert.Equal(9, result.Count);
-        Assert.Equal(new[] { "index1", "index2", "similarity", "intensity_coverage1",
+        Assert.Equal(new[] { "index1", "index2", "cosine", "intensity_coverage1",
             "intensity_coverage2", "data_index1", "data_index2" },
             result.Columns);
         Assert.Equal(new object?[] { 0L, 1L, 4L, 2L, 3L, 2L, 3L, 1L, 4L }, result["index2"]);
+        Assert.Equal(new[] { "cosine" }, result.ScoreColumns);
         Assert.Contains("\"mode\":\"library_search\"", result.MetadataJson);
+        Assert.Contains("\"methods\":[\"cosine\"]", result.MetadataJson);
         Assert.True(result.HasMatchedData);
         Assert.Equal(new long[] { 0, 1, 4, 2, 3 }, result.SourceIndices(2));
         var (first, second) = result.MatchRecords(2); // pair (1, 4)
@@ -77,13 +79,47 @@ public class SimilarityTests
     }
 
     [Fact]
+    public void MethodText()
+    {
+        Assert.Equal(SimilarityMethod.Cosine | SimilarityMethod.Bonanza,
+            new SimilarityOptions().WithMethods("bonanza, cosine").Methods);
+        Assert.Throws<SimilarityArgumentException>(() => new SimilarityOptions().WithMethods("nope"));
+    }
+
+    [Fact]
+    public void SeveralMethods()
+    {
+        using var ds = Dataset.Load(Sample);
+        var options = new SimilarityOptions(
+            Methods: SimilarityMethod.Bonanza | SimilarityMethod.Cosine | SimilarityMethod.ModifiedCosine);
+        using var result = SpectrumSimilarity.LibrarySearch(ds, ds, 0.0, options);
+        Assert.Equal(new[] { "index1", "index2", "cosine", "modified_cosine", "bonanza",
+            "intensity_coverage1", "intensity_coverage2", "data_index1", "data_index2" }, result.Columns);
+        Assert.Equal(new[] { "cosine", "modified_cosine", "bonanza" }, result.ScoreColumns);
+        Assert.Equal(25, result.Count);
+        // sample.msp has a PrecursorMZ column, so the precursor methods have scores.
+        foreach (var column in new[] { "modified_cosine", "bonanza" })
+        {
+            Assert.All(result[column], v => Assert.InRange(Assert.IsType<double>(v), 0.0, 1.0));
+            Assert.Equal(25, result.DescribeScores(column).Count);
+            Assert.Equal(25, result.Histogram(5, column).Counts.Sum());
+        }
+        Assert.Throws<SimilarityColumnNotFoundException>(() => result.DescribeScores("index1"));
+        Assert.Throws<SimilarityArgumentException>(() =>
+            SpectrumSimilarity.AllPairs(ds, ds, options));
+        Assert.Throws<SimilarityArgumentException>(() =>
+            SpectrumSimilarity.AllPairs(ds, ds, new SimilarityOptions(Methods: 0)));
+    }
+
+    [Fact]
     public void ByKey()
     {
         using var ds = Dataset.Load(Sample);
         ds.SetSpecId("SpecID", "SP");
         using var reordered = ds.Select(4, 3, 2);
-        using var result = SpectrumSimilarity.SimilarityByKey(ds, reordered);
-        Assert.Equal(new[] { "SpecID", "index1", "index2", "similarity",
+        using var result = SpectrumSimilarity.SimilarityByKey(ds, reordered,
+            options: new SimilarityOptions(Methods: SimilarityMethod.ReverseCosine));
+        Assert.Equal(new[] { "SpecID", "index1", "index2", "reverse_cosine",
             "intensity_coverage1", "intensity_coverage2" }, result.Columns);
         Assert.Equal(new object?[] { 2L, 3L, 4L }, result["index1"]);
         Assert.Equal(new object?[] { 2L, 1L, 0L }, result["index2"]);
@@ -103,7 +139,7 @@ public class SimilarityTests
             using var result = SpectrumSimilarity.LibrarySearch(ds, ds, 0.9);
             var mask = result["index1"].Select(v => (long)v! == 1).ToArray();
             using var filtered = result.Filter(mask);
-            using var ranked = filtered.SortBy("similarity", ascending: false);
+            using var ranked = filtered.SortBy("cosine", ascending: false);
             Assert.Equal(new object?[] { 1L, 4L }, ranked["index2"]);
             string path = Path.Combine(tmp, "hits.mssim");
             ranked.Save(path);
@@ -111,7 +147,7 @@ public class SimilarityTests
             Assert.Equal(2, loaded.Count);
             Assert.Equal(new long[] { 1, 4 }, loaded.SourceIndices(2));
             loaded.ExportTable(Path.Combine(tmp, "hits.tsv"));
-            Assert.StartsWith("index1\tindex2\tsimilarity", File.ReadAllText(Path.Combine(tmp, "hits.tsv")));
+            Assert.StartsWith("index1\tindex2\tcosine", File.ReadAllText(Path.Combine(tmp, "hits.tsv")));
             Assert.Throws<SimilarityFileException>(() => SimilarityDataset.Load(Path.Combine(tmp, "missing.mssim")));
         }
         finally

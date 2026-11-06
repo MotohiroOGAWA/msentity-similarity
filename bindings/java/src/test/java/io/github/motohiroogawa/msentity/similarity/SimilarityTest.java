@@ -49,7 +49,7 @@ class SimilarityTest {
               new long[] {0, 2},
               ds,
               new long[] {1, 4},
-              Options.defaults().withMethod(Options.Method.REVERSE_COSINE));
+              Options.defaults().withMethods(Options.Method.REVERSE_COSINE));
       assertArrayEquals(new float[] {0.7586880922317505f, 0.31010058522224426f}, scores, 1e-6f);
       // ppm only (0 Da turns the Da rule off).
       Options ppm = Options.defaults().withMzToleranceDa(0).withMzTolerancePpm(20);
@@ -77,11 +77,13 @@ class SimilarityTest {
         assertEquals(25_025, last.get());
         assertEquals(9, result.size());
         assertEquals(
-            List.of("index1", "index2", "similarity", "intensity_coverage1",
+            List.of("index1", "index2", "cosine", "intensity_coverage1",
                 "intensity_coverage2", "data_index1", "data_index2"),
             result.columns());
         assertEquals(List.of(0L, 1L, 4L, 2L, 3L, 2L, 3L, 1L, 4L), result.column("index2"));
+        assertEquals(List.of("cosine"), result.scoreColumns());
         assertTrue(result.metadataJson().contains("\"mode\":\"library_search\""));
+        assertTrue(result.metadataJson().contains("\"methods\":[\"cosine\"]"));
         assertTrue(result.hasMatchedData());
         assertArrayEquals(new long[] {0, 1, 4, 2, 3}, result.sourceIndices(2));
         try (SimilarityDataset.Match match = result.matchRecords(2)) { // pair (1, 4)
@@ -95,12 +97,53 @@ class SimilarityTest {
   }
 
   @Test
+  void methodText() {
+    assertEquals(
+        java.util.EnumSet.of(Options.Method.COSINE, Options.Method.BONANZA),
+        Options.defaults().withMethods("bonanza, cosine").methods());
+    assertThrows(
+        SimilarityException.InvalidArgument.class, () -> Options.defaults().withMethods("nope"));
+    assertThrows(
+        SimilarityException.InvalidArgument.class,
+        () -> Options.defaults().withMethods(java.util.EnumSet.noneOf(Options.Method.class)));
+  }
+
+  @Test
+  void severalMethods() {
+    Options options =
+        Options.defaults()
+            .withMethods(Options.Method.BONANZA, Options.Method.COSINE, Options.Method.MODIFIED_COSINE);
+    try (Dataset ds = Dataset.load(SAMPLE);
+        SimilarityDataset result = Similarity.librarySearch(ds, ds, 0.0, options)) {
+      assertEquals(
+          List.of("index1", "index2", "cosine", "modified_cosine", "bonanza",
+              "intensity_coverage1", "intensity_coverage2", "data_index1", "data_index2"),
+          result.columns());
+      assertEquals(List.of("cosine", "modified_cosine", "bonanza"), result.scoreColumns());
+      assertEquals(25, result.size());
+      // sample.msp has a PrecursorMZ column, so the precursor methods have scores.
+      for (String column : List.of("modified_cosine", "bonanza")) {
+        for (Object value : result.column(column)) {
+          assertTrue(value instanceof Double d && d >= 0 && d <= 1, column + ": " + value);
+        }
+        assertEquals(25, result.describeScores(column).count());
+        assertEquals(25, java.util.Arrays.stream(result.histogram(column, 5).counts()).sum());
+      }
+      assertThrows(SimilarityException.ColumnNotFound.class, () -> result.describeScores("index1"));
+      assertThrows(
+          SimilarityException.InvalidArgument.class, () -> Similarity.allPairs(ds, ds, options));
+    }
+  }
+
+  @Test
   void byKey() {
     try (Dataset ds = Dataset.load(SAMPLE)) {
       ds.setSpecId("SpecID", "SP", false, 0);
       try (Dataset reordered = ds.select(4, 3, 2);
-          SimilarityDataset result = Similarity.similarityByKey(ds, reordered)) {
-        assertEquals(List.of("SpecID", "index1", "index2", "similarity",
+          SimilarityDataset result =
+              Similarity.similarityByKey(ds, reordered, "SpecID", "SpecID",
+                  Options.defaults().withMethods(Options.Method.REVERSE_COSINE))) {
+        assertEquals(List.of("SpecID", "index1", "index2", "reverse_cosine",
                 "intensity_coverage1", "intensity_coverage2"), result.columns());
         assertEquals(List.of(2L, 3L, 4L), result.column("index1"));
         assertEquals(List.of(2L, 1L, 0L), result.column("index2"));
@@ -121,7 +164,7 @@ class SimilarityTest {
       boolean[] mask = new boolean[index1.size()];
       for (int i = 0; i < mask.length; i++) mask[i] = index1.get(i).equals(1L);
       try (SimilarityDataset filtered = result.filter(mask);
-          SimilarityDataset ranked = filtered.sortBy("similarity", false)) {
+          SimilarityDataset ranked = filtered.sortBy("cosine", false)) {
         assertEquals(List.of(1L, 4L), ranked.column("index2"));
         Path path = tmp.resolve("hits.mssim");
         ranked.save(path);
@@ -130,7 +173,7 @@ class SimilarityTest {
           assertArrayEquals(new long[] {1, 4}, loaded.sourceIndices(2));
           loaded.exportTable(tmp.resolve("hits.tsv"));
           assertTrue(
-              Files.readString(tmp.resolve("hits.tsv")).startsWith("index1\tindex2\tsimilarity"));
+              Files.readString(tmp.resolve("hits.tsv")).startsWith("index1\tindex2\tcosine"));
         }
       }
       assertThrows(

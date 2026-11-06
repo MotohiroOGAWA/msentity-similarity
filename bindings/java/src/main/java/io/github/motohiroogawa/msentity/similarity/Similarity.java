@@ -22,7 +22,7 @@ import java.lang.invoke.MethodType;
  * try (Dataset query = Dataset.load(Path.of("query.msp"));
  *     Dataset library = Dataset.load(Path.of("library.msp"));
  *     SimilarityDataset hits = Similarity.librarySearch(query, library, 0.8)) {
- *   hits.column("similarity");
+ *   hits.column("cosine");
  *   hits.save(Path.of("hits.mssim"));
  * }
  * }</pre>
@@ -128,7 +128,7 @@ public final class Similarity {
   }
 
   /**
-   * All (query, reference) pairs scoring at least {@code threshold}.
+   * All (query, reference) pairs where any selected method scores at least {@code threshold}.
    *
    * @param includeMatchedData embed the compared spectra in the result
    * @param querySource recorded in the metadata (for example a file name); may be null
