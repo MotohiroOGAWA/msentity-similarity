@@ -16,7 +16,7 @@ Options.defaults().withMethods(Options.Method.COSINE, Options.Method.BONANZA);
 | | |
 |---|---|
 | Requires | Java ≥ 22; run with `--enable-native-access=ALL-UNNAMED`; the `io.github.motohiroogawa:msentity` artifact |
-| Coordinates | `io.github.motohiroogawa:msentity-similarity:1.2.1` |
+| Coordinates | `io.github.motohiroogawa:msentity-similarity:2.0.0` |
 | Native library | `-Dmssim.library=…`, else `MSSIM_C_LIBRARY`, else bundled in the JAR, else the system path |
 | Files | `Similarity.java` (calculations), `SimilarityDataset.java` (results), `Options.java`, `Native.java`, `SimilarityException.java` |
 
