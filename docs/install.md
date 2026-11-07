@@ -113,5 +113,4 @@ cmake -S . -B build -G Ninja \
 
 Releases are built and tested on Ubuntu 22.04 (Linux x64, glibc 2.35) and on
 Windows (x64), and every package is attached to the GitHub Release of the tag
-`v<version>`. The maintainers' scripts are in
-[msentity-release-tools](https://github.com/MotohiroOGAWA/msentity-release-tools).
+`v<version>`; the version in `CMakeLists.txt` equals the tag.
