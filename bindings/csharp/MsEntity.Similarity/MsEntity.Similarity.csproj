@@ -8,7 +8,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <RootNamespace>MsEntity.Similarity</RootNamespace>
     <PackageId>MsEntity.Similarity</PackageId>
-    <Version>2.0.0</Version>
+    <Version>2.0.1</Version>
     <Description>.NET binding of msentity-similarity (spectrum similarity and .mssim files)</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>

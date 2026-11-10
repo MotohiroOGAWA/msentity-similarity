@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(msentity_similarity
-  VERSION 2.0.0
+  VERSION 2.0.1
   DESCRIPTION "Spectrum similarity and the .mssim result format, built on msentity"
   LANGUAGES CXX)
 

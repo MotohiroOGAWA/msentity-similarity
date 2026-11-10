@@ -14,7 +14,7 @@ new SimilarityOptions(Methods: SimilarityMethod.Cosine | SimilarityMethod.Bonanz
 | | |
 |---|---|
 | Requires | .NET ≥ 8; the `MsEntity` package (or a sibling msentity checkout) |
-| Package | `MsEntity.Similarity` 2.0.0 |
+| Package | `MsEntity.Similarity` 2.0.1 |
 | Native library | `MSSIM_C_LIBRARY`, else the application directory / `runtimes/<rid>/native/`, else the system path |
 | Files | `SpectrumSimilarity.cs` (calculations), `SimilarityDataset.cs` (results), `NativeMethods.cs`, `SimilarityException.cs` |
 
