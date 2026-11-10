@@ -2,10 +2,10 @@
 
 Each msentity-similarity release depends on one msentity release: CMake fetches
 its tag and every language package requires that version. The examples use
-msentity-similarity 1.2.1, the latest release when this page was written.
-To use another version, replace the msentity-similarity version `1.2.1`.
+msentity-similarity 2.0.0, the latest release when this page was written.
+To use another version, replace the msentity-similarity version `2.0.0`.
 The msentity release it depends on is named in its release notes and in
-`CMakeLists.txt` (`GIT_TAG`); for these examples, msentity 1.2.0.
+`CMakeLists.txt` (`GIT_TAG`); for these examples, msentity 1.2.2.
 
 ## C
 
@@ -31,7 +31,7 @@ compatible released `msentity` automatically:
 include(FetchContent)
 FetchContent_Declare(msentity_similarity
   GIT_REPOSITORY https://github.com/MotohiroOGAWA/msentity-similarity.git
-  GIT_TAG v1.2.1)  # msentity-similarity release
+  GIT_TAG v2.0.0)  # msentity-similarity release
 FetchContent_MakeAvailable(msentity_similarity)
 
 target_link_libraries(app PRIVATE msentity::similarity)
@@ -47,9 +47,9 @@ The wheels are attached to the GitHub Releases. Give pip the release page of
 msentity-similarity and that of the msentity release it depends on:
 
 ```console
-pip install msentity-similarity==1.2.1 \
-  --find-links https://github.com/MotohiroOGAWA/msentity-similarity/releases/expanded_assets/v1.2.1 \
-  --find-links https://github.com/MotohiroOGAWA/msentity/releases/expanded_assets/v1.2.0
+pip install msentity-similarity==2.0.0 \
+  --find-links https://github.com/MotohiroOGAWA/msentity-similarity/releases/expanded_assets/v2.0.0 \
+  --find-links https://github.com/MotohiroOGAWA/msentity/releases/expanded_assets/v1.2.2
 ```
 
 (Earlier instructions used a GitHub Pages index; it is no longer updated.) <!-- fixed -->
@@ -73,9 +73,9 @@ the same for the dataset API:
 ```console
 mkdir -p lib
 curl -L -o lib/msentity.jar \
-  https://github.com/MotohiroOGAWA/msentity/releases/download/v1.2.0/msentity-1.2.0.jar
+  https://github.com/MotohiroOGAWA/msentity/releases/download/v1.2.2/msentity-1.2.2.jar
 curl -L -o lib/msentity-similarity.jar \
-  https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v1.2.1/msentity-similarity-1.2.1.jar
+  https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v2.0.0/msentity-similarity-2.0.0.jar
 java --enable-native-access=ALL-UNNAMED -cp 'app.jar:lib/*' app.Main
 ```
 
@@ -86,11 +86,11 @@ then add that directory as the package source:
 
 ```console
 mkdir -p packages
-curl -L -o packages/MsEntity.1.2.0.nupkg \
-  https://github.com/MotohiroOGAWA/msentity/releases/download/v1.2.0/MsEntity.1.2.0.nupkg
-curl -L -o packages/MsEntity.Similarity.1.2.1.nupkg \
-  https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v1.2.1/MsEntity.Similarity.1.2.1.nupkg
-dotnet add package MsEntity.Similarity --version 1.2.1 --source ./packages
+curl -L -o packages/MsEntity.1.2.2.nupkg \
+  https://github.com/MotohiroOGAWA/msentity/releases/download/v1.2.2/MsEntity.1.2.2.nupkg
+curl -L -o packages/MsEntity.Similarity.2.0.0.nupkg \
+  https://github.com/MotohiroOGAWA/msentity-similarity/releases/download/v2.0.0/MsEntity.Similarity.2.0.0.nupkg
+dotnet add package MsEntity.Similarity --version 2.0.0 --source ./packages
 ```
 
 ## Building and testing from source
