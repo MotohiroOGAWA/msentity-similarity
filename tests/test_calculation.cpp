@@ -34,8 +34,8 @@ TEST(Coverage, MatchedShareOfSquaredIntensities) {
   a.set_column("ID", std::vector<Value>{std::string("x"), std::string("y")});
   b.set_column("ID", std::vector<Value>{std::string("x"), std::string("y")});
   auto table = similarity_by_key(a, b, "ID", "ID");
-  auto c1 = float_column(*table, "intensity_coverage1");
-  auto c2 = float_column(*table, "intensity_coverage2");
+  auto c1 = float_column(*table, "peak_intensity_coverage1");
+  auto c2 = float_column(*table, "peak_intensity_coverage2");
   auto s = float_column(*table, "cosine");
   EXPECT_FLOAT_EQ(c1[0], 9.0f / 25.0f);  // 3² / (3² + 4²)
   EXPECT_FLOAT_EQ(c2[0], 0.5f);          // 1² / (1² + 1²)
@@ -46,7 +46,7 @@ TEST(Coverage, MatchedShareOfSquaredIntensities) {
   Options root;
   root.intensity_exponent = 0.5;
   auto rooted = similarity_by_key(a, b, "ID", "ID", root);
-  EXPECT_FLOAT_EQ(float_column(*rooted, "intensity_coverage1")[0], 3.0f / 7.0f);
+  EXPECT_FLOAT_EQ(float_column(*rooted, "peak_intensity_coverage1")[0], 3.0f / 7.0f);
 
   // cosine <= sqrt(c1 c2); reverse cosine <= sqrt(c2).
   EXPECT_LE(s[0], std::sqrt(c1[0] * c2[0]) + 1e-6);
@@ -54,7 +54,7 @@ TEST(Coverage, MatchedShareOfSquaredIntensities) {
   reverse.methods = {Method::ReverseCosine};
   auto reversed = similarity_by_key(a, b, "ID", "ID", reverse);
   EXPECT_LE(float_column(*reversed, "reverse_cosine")[0],
-            std::sqrt(float_column(*reversed, "intensity_coverage2")[0]) + 1e-6);
+            std::sqrt(float_column(*reversed, "peak_intensity_coverage2")[0]) + 1e-6);
 }
 
 TEST(PrecursorMethods, ModifiedCosineAndBonanza) {
@@ -75,8 +75,8 @@ TEST(PrecursorMethods, ModifiedCosineAndBonanza) {
   auto table = similarity_by_key(a, b, "ID", "ID", options);
   EXPECT_EQ(internal::column_names(*table),
             (std::vector<std::string>{"ID", "index1", "index2", "cosine", "modified_cosine", "bonanza",
-                                      "intensity_coverage1", "intensity_coverage2",
-                                      "modified_intensity_coverage1", "modified_intensity_coverage2"}));
+                                      "peak_intensity_coverage1", "peak_intensity_coverage2",
+                                      "modified_peak_intensity_coverage1", "modified_peak_intensity_coverage2"}));
   auto cosine = internal::to_values(*table->GetColumnByName("cosine"));
   auto modified = internal::to_values(*table->GetColumnByName("modified_cosine"));
   auto bonanza = internal::to_values(*table->GetColumnByName("bonanza"));
@@ -92,9 +92,9 @@ TEST(PrecursorMethods, ModifiedCosineAndBonanza) {
 
   // Coverages of the modified pairing: x pairs both peaks of each side (direct
   // coverage only 1/2); y pairs 100 only (9/10 and 1/2); z has none.
-  auto direct1 = internal::to_values(*table->GetColumnByName("intensity_coverage1"));
-  auto shifted1 = internal::to_values(*table->GetColumnByName("modified_intensity_coverage1"));
-  auto shifted2 = internal::to_values(*table->GetColumnByName("modified_intensity_coverage2"));
+  auto direct1 = internal::to_values(*table->GetColumnByName("peak_intensity_coverage1"));
+  auto shifted1 = internal::to_values(*table->GetColumnByName("modified_peak_intensity_coverage1"));
+  auto shifted2 = internal::to_values(*table->GetColumnByName("modified_peak_intensity_coverage2"));
   EXPECT_FLOAT_EQ(std::get<double>(direct1[0]), 0.5f);
   EXPECT_FLOAT_EQ(std::get<double>(shifted1[0]), 1.0f);
   EXPECT_FLOAT_EQ(std::get<double>(shifted2[0]), 1.0f);
@@ -113,10 +113,10 @@ TEST(PrecursorMethods, ModifiedCosineAndBonanza) {
   bonanza_only.methods = {Method::Bonanza};
   auto only = similarity_by_key(a, b, "ID", "ID", bonanza_only);
   EXPECT_EQ(internal::column_names(*only),
-            (std::vector<std::string>{"ID", "index1", "index2", "bonanza", "intensity_coverage1",
-                                      "intensity_coverage2", "modified_intensity_coverage1",
-                                      "modified_intensity_coverage2"}));
-  EXPECT_FLOAT_EQ(std::get<double>(internal::to_values(*only->GetColumnByName("modified_intensity_coverage1"))[1]), 0.9f);
+            (std::vector<std::string>{"ID", "index1", "index2", "bonanza", "peak_intensity_coverage1",
+                                      "peak_intensity_coverage2", "modified_peak_intensity_coverage1",
+                                      "modified_peak_intensity_coverage2"}));
+  EXPECT_FLOAT_EQ(std::get<double>(internal::to_values(*only->GetColumnByName("modified_peak_intensity_coverage1"))[1]), 0.9f);
   // Cosine alone has none.
   Options cosine_only;
   EXPECT_EQ(similarity_by_key(a, b, "ID", "ID", cosine_only)->num_columns(), 6);
@@ -155,8 +155,8 @@ TEST(Coverage, BoundHoldsOnSampleLibrarySearch) {
     options.intensity_exponent = exponent;
     auto table = library_search(ds, ds, 0.0, options);
     auto s = float_column(*table, "cosine");
-    auto c1 = float_column(*table, "intensity_coverage1");
-    auto c2 = float_column(*table, "intensity_coverage2");
+    auto c1 = float_column(*table, "peak_intensity_coverage1");
+    auto c2 = float_column(*table, "peak_intensity_coverage2");
     ASSERT_EQ(s.size(), c1.size());
     for (std::size_t i = 0; i < s.size(); ++i) {
       EXPECT_GE(c1[i], 0.0);
@@ -398,7 +398,7 @@ TEST(ByKey, PairsEqualKeysInFirstDatasetOrder) {
   auto table = similarity_by_key(ds1, ds2, "ID", "Key");
   EXPECT_EQ(internal::column_names(*table),
             (std::vector<std::string>{"ID", "Key", "index1", "index2", "cosine",
-                                      "intensity_coverage1", "intensity_coverage2"}));
+                                      "peak_intensity_coverage1", "peak_intensity_coverage2"}));
   EXPECT_EQ(table->num_rows(), 2);
   auto ids = internal::to_values(*table->column(0));
   EXPECT_EQ(std::get<std::string>(ids[0]), "a");
@@ -412,7 +412,7 @@ TEST(ByKey, PairsEqualKeysInFirstDatasetOrder) {
   auto numeric = similarity_by_key(ds1, ds2, "N", "N");
   EXPECT_EQ(internal::column_names(*numeric),
             (std::vector<std::string>{"N", "index1", "index2", "cosine",
-                                      "intensity_coverage1", "intensity_coverage2"}));
+                                      "peak_intensity_coverage1", "peak_intensity_coverage2"}));
   EXPECT_EQ(numeric->num_rows(), 2);
 }
 
@@ -423,8 +423,8 @@ TEST(ByKey, Errors) {
   EXPECT_THROW(similarity_by_key(ds, ds, "Missing", "ID"), KeyError);
   ds.set_column("index1", Value(int64_t{1}));
   EXPECT_THROW(similarity_by_key(ds, ds, "index1", "index1"), std::invalid_argument);  // reserved
-  ds.set_column("intensity_coverage1", Value(int64_t{1}));
-  EXPECT_THROW(similarity_by_key(ds, ds, "intensity_coverage1", "intensity_coverage1"),
+  ds.set_column("peak_intensity_coverage1", Value(int64_t{1}));
+  EXPECT_THROW(similarity_by_key(ds, ds, "peak_intensity_coverage1", "peak_intensity_coverage1"),
                std::invalid_argument);
 }
 

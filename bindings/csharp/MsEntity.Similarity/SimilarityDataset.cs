@@ -17,7 +17,7 @@ public sealed record ScoreHistogram(long[] Counts, double[] Edges);
 /// Columns: key columns (by-key results), <c>index1</c>, <c>index2</c> (positions in the input
 /// datasets), one score column per method (<c>cosine</c>, <c>reverse_cosine</c>,
 /// <c>modified_cosine</c>, <c>bonanza</c>; see <see cref="ScoreColumns"/>),
-/// <c>intensity_coverage1</c> / <c>intensity_coverage2</c>, and <c>data_index1</c> /
+/// <c>peak_intensity_coverage1</c> / <c>peak_intensity_coverage2</c>, and <c>data_index1</c> /
 /// <c>data_index2</c> when the compared spectra are embedded. Cell values are <c>null</c>,
 /// <see cref="bool"/>, <see cref="long"/>, <see cref="double"/>, or <see cref="string"/>.
 /// Dispose results when done.

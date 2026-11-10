@@ -22,8 +22,8 @@ import java.util.List;
  *
  * <p>Columns: key columns (by-key results), {@code index1}, {@code index2} (positions in the input
  * datasets), one score column per method ({@code cosine}, {@code reverse_cosine}, {@code
- * modified_cosine}, {@code bonanza}; see {@link #scoreColumns}), {@code intensity_coverage1} /
- * {@code intensity_coverage2}, and {@code data_index1} / {@code data_index2} when the compared
+ * modified_cosine}, {@code bonanza}; see {@link #scoreColumns}), {@code peak_intensity_coverage1} /
+ * {@code peak_intensity_coverage2}, and {@code data_index1} / {@code data_index2} when the compared
  * spectra are embedded. Cell values are {@code null}, {@link
  * Boolean}, {@link Long}, {@link Double}, or {@link String}.
  *

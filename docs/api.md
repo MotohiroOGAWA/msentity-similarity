@@ -82,14 +82,14 @@ sim::SimilarityDataset hits = sim::calculate_library_search(
     [](int64_t done, int64_t total) {});  // optional progress callback
 
 hits.size();      // 4
-hits.columns();   // {"index1", "index2", "cosine", "intensity_coverage1",
-                  //  "intensity_coverage2", "data_index1", "data_index2"}
+hits.columns();   // {"index1", "index2", "cosine", "peak_intensity_coverage1",
+                  //  "peak_intensity_coverage2", "data_index1", "data_index2"}
 ```
 
 The result table:
 
 ```text
- index1  index2  cosine      intensity_coverage1  intensity_coverage2  data_index1  data_index2
+ index1  index2  cosine      peak_intensity_coverage1  peak_intensity_coverage2  data_index1  data_index2
       0       0  1.0         1.0                  1.0                            0            0
       0       1  0.759714    0.92927              1.0                            0            1
       1       0  0.759714    1.0                  0.92927                        1            0
@@ -100,10 +100,10 @@ The result table:
 * `cosine` (and `reverse_cosine`, `modified_cosine`, `bonanza` when selected) —
   one score column per method (`hits.score_columns()`); null where a precursor
   method lacks a precursor m/z.
-* `intensity_coverage1` / `intensity_coverage2` — share of each spectrum's
+* `peak_intensity_coverage1` / `peak_intensity_coverage2` — share of each spectrum's
   squared (exponentiated) intensity carried by its matched peaks; the cosine
-  never exceeds `sqrt(intensity_coverage1 · intensity_coverage2)`
-  ([similarity.md](similarity.md#8-intensity-coverage)).
+  never exceeds `sqrt(peak_intensity_coverage1 · peak_intensity_coverage2)`
+  ([similarity.md](similarity.md#8-peak-intensity-coverage)).
 * `data_index1` / `data_index2` — rows of the embedded spectra (only with
   `include_matched_data`).
 
@@ -159,7 +159,7 @@ hits.export_table("hits.csv");          // table only: .csv, .tsv, or .parquet
 `hits.csv`:
 
 ```text
-index1,index2,cosine,intensity_coverage1,intensity_coverage2,data_index1,data_index2
+index1,index2,cosine,peak_intensity_coverage1,peak_intensity_coverage2,data_index1,data_index2
 0,0,1.0,1.0,1.0,0,0
 0,1,0.7597143650054932,0.9292697906494141,1.0,0,1
 1,0,0.7597143650054932,1.0,0.9292697906494141,1,0
@@ -185,8 +185,8 @@ sim::SimilarityDataset by_key = sim::calculate_similarity(
     "a.msds", "b.msds");   // sources for the metadata
 
 by_key.columns();          // {"SpecID", "index1", "index2", "cosine",
-                           //  "intensity_coverage1", "intensity_coverage2"}
-// SpecID index1 index2 cosine     intensity_coverage1 intensity_coverage2
+                           //  "peak_intensity_coverage1", "peak_intensity_coverage2"}
+// SpecID index1 index2 cosine     peak_intensity_coverage1 peak_intensity_coverage2
 // SP1         0      1  1.0        1.0                 1.0
 // SP2         1      0  1.0        1.0                 1.0
 ```

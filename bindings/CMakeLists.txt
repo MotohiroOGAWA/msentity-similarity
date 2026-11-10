@@ -39,12 +39,17 @@ endif()
 # local Maven repository first (fixture binding_java_msentity).
 find_program(MSSIM_MVN mvn)
 if(MSSIM_MVN)
+  # Match the Java artifact installed by the fixture to this source checkout.
+  file(READ "${_msentity_bindings}/java/pom.xml" _msentity_pom)
+  string(REGEX MATCH "<version>([^<]+)</version>" _msentity_version_match "${_msentity_pom}")
+  set(_msentity_java_version "${CMAKE_MATCH_1}")
   add_test(NAME binding_java_msentity
     COMMAND ${MSSIM_MVN} -q -B install -DskipTests
     WORKING_DIRECTORY ${_msentity_bindings}/java)
   set_tests_properties(binding_java_msentity PROPERTIES FIXTURES_SETUP msentity_java)
   add_test(NAME binding_java
     COMMAND ${MSSIM_MVN} -q -B test
+      -Dmsentity.version=${_msentity_java_version}
       -Dmssim.library=$<TARGET_FILE:msentity_similarity_c>
       -Dmsentity.library=$<TARGET_FILE:msentity_c>
       -Dmsentity.data=${msentity_SOURCE_DIR}/tests/data

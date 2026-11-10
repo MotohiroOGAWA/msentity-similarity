@@ -77,8 +77,8 @@ class SimilarityTest {
         assertEquals(25_025, last.get());
         assertEquals(9, result.size());
         assertEquals(
-            List.of("index1", "index2", "cosine", "intensity_coverage1",
-                "intensity_coverage2", "data_index1", "data_index2"),
+            List.of("index1", "index2", "cosine", "peak_intensity_coverage1",
+                "peak_intensity_coverage2", "data_index1", "data_index2"),
             result.columns());
         assertEquals(List.of(0L, 1L, 4L, 2L, 3L, 2L, 3L, 1L, 4L), result.column("index2"));
         assertEquals(List.of("cosine"), result.scoreColumns());
@@ -117,8 +117,8 @@ class SimilarityTest {
         SimilarityDataset result = Similarity.librarySearch(ds, ds, 0.0, options)) {
       assertEquals(
           List.of("index1", "index2", "cosine", "modified_cosine", "bonanza",
-              "intensity_coverage1", "intensity_coverage2", "modified_intensity_coverage1",
-              "modified_intensity_coverage2", "data_index1", "data_index2"),
+              "peak_intensity_coverage1", "peak_intensity_coverage2", "modified_peak_intensity_coverage1",
+              "modified_peak_intensity_coverage2", "data_index1", "data_index2"),
           result.columns());
       assertEquals(List.of("cosine", "modified_cosine", "bonanza"), result.scoreColumns());
       assertEquals(25, result.size());
@@ -145,7 +145,7 @@ class SimilarityTest {
               Similarity.similarityByKey(ds, reordered, "SpecID", "SpecID",
                   Options.defaults().withMethods(Options.Method.REVERSE_COSINE))) {
         assertEquals(List.of("SpecID", "index1", "index2", "reverse_cosine",
-                "intensity_coverage1", "intensity_coverage2"), result.columns());
+                "peak_intensity_coverage1", "peak_intensity_coverage2"), result.columns());
         assertEquals(List.of(2L, 3L, 4L), result.column("index1"));
         assertEquals(List.of(2L, 1L, 0L), result.column("index2"));
         assertFalse(result.hasMatchedData());

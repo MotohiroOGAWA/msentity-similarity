@@ -421,8 +421,8 @@ void add_score_columns(const std::vector<Scored>& scored, const std::vector<Meth
     coverage1.push_back(s.coverage1);
     coverage2.push_back(s.coverage2);
   }
-  add("intensity_coverage1", coverage1);
-  add("intensity_coverage2", coverage2);
+  add("peak_intensity_coverage1", coverage1);
+  add("peak_intensity_coverage2", coverage2);
   // With modified cosine or BONANZA: the coverages of their pairing (which
   // bound modified cosine).
   if (any_precursor_method(methods)) {
@@ -431,8 +431,8 @@ void add_score_columns(const std::vector<Scored>& scored, const std::vector<Meth
       modified1.push_back(s.modified_coverage1);
       modified2.push_back(s.modified_coverage2);
     }
-    add("modified_intensity_coverage1", modified1);
-    add("modified_intensity_coverage2", modified2);
+    add("modified_peak_intensity_coverage1", modified1);
+    add("modified_peak_intensity_coverage2", modified2);
   }
 }
 
@@ -652,9 +652,9 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
   const auto methods = selected_methods(options);
   if (!ds1.has_column(key1)) throw KeyError("ds1 does not contain key column: " + key1);
   if (!ds2.has_column(key2)) throw KeyError("ds2 does not contain key column: " + key2);
-  std::vector<std::string> reserved = {"index1", "index2", "similarity", "intensity_coverage1",
-                                       "intensity_coverage2", "modified_intensity_coverage1",
-                                       "modified_intensity_coverage2"};
+  std::vector<std::string> reserved = {"index1", "index2", "similarity", "peak_intensity_coverage1",
+                                       "peak_intensity_coverage2", "modified_peak_intensity_coverage1",
+                                       "modified_peak_intensity_coverage2"};
   for (Method method : all_methods()) reserved.push_back(method_name(method));
   for (const auto& key : {key1, key2}) {
     if (std::find(reserved.begin(), reserved.end(), key) != reserved.end()) {

@@ -43,8 +43,8 @@ hits = mss.library_search(ds, ds, 0.7,
                           query_source="example.msp",          # recorded in the metadata
                           progress=lambda done, total: None)    # optional
 len(hits)                       # 4
-hits.columns                    # ['index1', 'index2', 'cosine', 'intensity_coverage1',
-                                #  'intensity_coverage2', 'data_index1', 'data_index2']
+hits.columns                    # ['index1', 'index2', 'cosine', 'peak_intensity_coverage1',
+                                #  'peak_intensity_coverage2', 'data_index1', 'data_index2']
 hits["cosine"]                  # [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
 hits.metadata["parameters"]     # {'threshold': 0.7, 'methods': ['cosine'], 'mz_tolerance_da': 0.01,
                                 #  'mz_tolerance_ppm': 10.0, 'intensity_exponent': 1.0,
@@ -76,7 +76,7 @@ hits.export("hits.csv")         # table only: .csv, .tsv, .parquet
 ds.set_spec_id("SpecID", "SP")
 pairs = mss.similarity_by_key(ds, ds[[1, 0]], "SpecID", "SpecID")
 pairs.to_pandas()
-#   SpecID  index1  index2  cosine  intensity_coverage1  intensity_coverage2
+#   SpecID  index1  index2  cosine  peak_intensity_coverage1  peak_intensity_coverage2
 # 0    SP1       0       1     1.0                  1.0                  1.0
 # 1    SP2       1       0     1.0                  1.0                  1.0
 ```
@@ -114,8 +114,8 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
            "example.msp", "example.msp",    // sources for the metadata
            (done, total) -> {})) {          // progress, may be null
     hits.size();                            // 4
-    hits.columns();      // [index1, index2, cosine, intensity_coverage1,
-                         //  intensity_coverage2, data_index1, data_index2]
+    hits.columns();      // [index1, index2, cosine, peak_intensity_coverage1,
+                         //  peak_intensity_coverage2, data_index1, data_index2]
     hits.scoreColumns();                    // [cosine]
     hits.column("cosine");           // [1.0, 0.7597143650054932, 0.7597143650054932, 1.0]
     hits.metadataJson();                    // {"created_at":"…","mode":"library_search",…}
@@ -145,8 +145,8 @@ try (Dataset ds = Dataset.load(Path.of("example.msp"))) {
   ds.setSpecId("SpecID", "SP", false, 1);
   try (Dataset other = ds.select(1, 0);
        SimilarityDataset pairs = Similarity.similarityByKey(ds, other)) {  // key "SpecID"
-    pairs.columns();         // [SpecID, index1, index2, cosine, intensity_coverage1,
-                             //  intensity_coverage2]
+    pairs.columns();         // [SpecID, index1, index2, cosine, peak_intensity_coverage1,
+                             //  peak_intensity_coverage2]
   }
 }
 SimilarityDataset loaded = SimilarityDataset.load(Path.of("best.mssim"));
@@ -184,8 +184,8 @@ new SimilarityOptions().FormatMzTolerance();   // "0.01Da,10ppm"
 using var hits = SpectrumSimilarity.LibrarySearch(ds, ds, threshold: 0.7,
     querySource: "example.msp", progress: (done, total) => { });
 hits.Count;                          // 4
-hits.Columns;                        // index1, index2, cosine, intensity_coverage1,
-                                     // intensity_coverage2, data_index1, data_index2
+hits.Columns;                        // index1, index2, cosine, peak_intensity_coverage1,
+                                     // peak_intensity_coverage2, data_index1, data_index2
 hits.ScoreColumns;                   // cosine
 hits["cosine"];               // 1.0, 0.7597143650054932, 0.7597143650054932, 1.0
 hits.MetadataJson;                   // {"created_at":"…","mode":"library_search",…}
@@ -211,8 +211,8 @@ multi.Histogram(5, column: "bonanza");
 ds.SetSpecId("SpecID", "SP");
 using var other = ds.Select(1, 0);
 using var pairs = SpectrumSimilarity.SimilarityByKey(ds, other);   // key "SpecID"
-pairs.Columns;                       // SpecID, index1, index2, cosine, intensity_coverage1,
-                                     // intensity_coverage2
+pairs.Columns;                       // SpecID, index1, index2, cosine, peak_intensity_coverage1,
+                                     // peak_intensity_coverage2
 
 using var loaded = SimilarityDataset.Load("best.mssim");
 loaded.SourceIndices(1);             // { 0, 1 }

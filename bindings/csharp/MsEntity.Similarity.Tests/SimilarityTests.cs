@@ -59,8 +59,8 @@ public class SimilarityTests
             progress: (done, total) => { lastDone = done; lastTotal = total; });
         Assert.Equal((25L, 25L), (lastDone, lastTotal));
         Assert.Equal(9, result.Count);
-        Assert.Equal(new[] { "index1", "index2", "cosine", "intensity_coverage1",
-            "intensity_coverage2", "data_index1", "data_index2" },
+        Assert.Equal(new[] { "index1", "index2", "cosine", "peak_intensity_coverage1",
+            "peak_intensity_coverage2", "data_index1", "data_index2" },
             result.Columns);
         Assert.Equal(new object?[] { 0L, 1L, 4L, 2L, 3L, 2L, 3L, 1L, 4L }, result["index2"]);
         Assert.Equal(new[] { "cosine" }, result.ScoreColumns);
@@ -94,8 +94,8 @@ public class SimilarityTests
             Methods: SimilarityMethod.Bonanza | SimilarityMethod.Cosine | SimilarityMethod.ModifiedCosine);
         using var result = SpectrumSimilarity.LibrarySearch(ds, ds, 0.0, options);
         Assert.Equal(new[] { "index1", "index2", "cosine", "modified_cosine", "bonanza",
-            "intensity_coverage1", "intensity_coverage2", "modified_intensity_coverage1",
-            "modified_intensity_coverage2", "data_index1", "data_index2" }, result.Columns);
+            "peak_intensity_coverage1", "peak_intensity_coverage2", "modified_peak_intensity_coverage1",
+            "modified_peak_intensity_coverage2", "data_index1", "data_index2" }, result.Columns);
         Assert.Equal(new[] { "cosine", "modified_cosine", "bonanza" }, result.ScoreColumns);
         Assert.Equal(25, result.Count);
         // sample.msp has a PrecursorMZ column, so the precursor methods have scores.
@@ -121,7 +121,7 @@ public class SimilarityTests
         using var result = SpectrumSimilarity.SimilarityByKey(ds, reordered,
             options: new SimilarityOptions(Methods: SimilarityMethod.ReverseCosine));
         Assert.Equal(new[] { "SpecID", "index1", "index2", "reverse_cosine",
-            "intensity_coverage1", "intensity_coverage2" }, result.Columns);
+            "peak_intensity_coverage1", "peak_intensity_coverage2" }, result.Columns);
         Assert.Equal(new object?[] { 2L, 3L, 4L }, result["index1"]);
         Assert.Equal(new object?[] { 2L, 1L, 0L }, result["index2"]);
         Assert.False(result.HasMatchedData);

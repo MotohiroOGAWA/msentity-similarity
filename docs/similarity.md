@@ -186,40 +186,40 @@ need exactly one method.
 * `intensity_exponent = 0.5` (square root) reduces the weight of dominant peaks.
   For the example spectra it raises the cosine from 0.75971 to 0.86077.
 
-## 8. Intensity coverage
+## 8. Peak intensity coverage
 
 Result tables (`library_search`, `similarity_by_key`) also report, for each
 side, how much of the spectrum the matched peaks explain:
 
 ```text
                         Σ  x²   (over the matched peaks of x)
-intensity_coverage = ─────────
+peak_intensity_coverage = ─────────
                         Σ  x²   (over all peaks of x)
 ```
 
 where x are the intensities after step 1 (raised to `intensity_exponent`, so
 x² = I^(2·exponent)). With `intensity_exponent = 0.5` this is simply the
 matched share of the summed raw intensity. A spectrum without positive
-intensity has coverage 0. The columns are `intensity_coverage1` (first /
-query spectrum) and `intensity_coverage2` (second / reference spectrum).
+intensity has coverage 0. The columns are `peak_intensity_coverage1` (first /
+query spectrum) and `peak_intensity_coverage2` (second / reference spectrum).
 
 By the Cauchy–Schwarz inequality the score cannot exceed what the coverages
 allow:
 
 ```text
-cosine          ≤ sqrt(intensity_coverage1 · intensity_coverage2) ≤ sqrt(min of the two)
-reverse_cosine  ≤ sqrt(intensity_coverage2)
+cosine          ≤ sqrt(peak_intensity_coverage1 · peak_intensity_coverage2) ≤ sqrt(min of the two)
+reverse_cosine  ≤ sqrt(peak_intensity_coverage2)
 ```
 
 The coverages come from the direct pairing (§1), the one cosine and reverse
 cosine use. Modified cosine pairs more peaks (the shifted ones too), so it can
-exceed sqrt(intensity_coverage). When modified cosine or BONANZA is
-calculated, the table also has `modified_intensity_coverage1` /
-`modified_intensity_coverage2`, the same shares under their pairing (direct and
+exceed sqrt(peak_intensity_coverage). When modified cosine or BONANZA is
+calculated, the table also has `modified_peak_intensity_coverage1` /
+`modified_peak_intensity_coverage2`, the same shares under their pairing (direct and
 shifted pairs; null without a precursor m/z), and the same argument gives
 
 ```text
-modified_cosine ≤ sqrt(modified_intensity_coverage1 · modified_intensity_coverage2)
+modified_cosine ≤ sqrt(modified_peak_intensity_coverage1 · modified_peak_intensity_coverage2)
 ```
 
 BONANZA uses the same pairing, so these columns show how much of each spectrum
@@ -227,7 +227,7 @@ its pairs cover, but it normalizes differently (sums instead of norms), so no
 such bound holds for it.
 
 So if spectrum 1 is a measured spectrum and spectrum 2 a prediction, a cosine
-above sqrt(intensity_coverage1) is impossible however good the predicted
+above sqrt(peak_intensity_coverage1) is impossible however good the predicted
 intensities are; equality needs every peak of the other side matched and the
 matched intensities proportional.
 
@@ -235,8 +235,8 @@ For the example spectra (spectrum 0 vs spectrum 1, exponent 1), the 185.0961
 peak of spectrum 0 is unmatched:
 
 ```text
-intensity_coverage1 = (245² + 1000² + 735²) / (245² + 1000² + 349² + 735²) = 0.92927
-intensity_coverage2 = 1
+peak_intensity_coverage1 = (245² + 1000² + 735²) / (245² + 1000² + 349² + 735²) = 0.92927
+peak_intensity_coverage2 = 1
 cosine 0.75971 ≤ sqrt(0.92927 · 1) = 0.96399
 ```
 
@@ -246,8 +246,8 @@ cosine 0.75971 ≤ sqrt(0.92927 · 1) = 0.96399
 |---|---|---|
 | `pair_scores` | the pairs you list: (ds1[i1[k]], ds2[i2[k]]) | one score per pair (array) |
 | `all_pairs_matrix` | every spectrum of ds1 with every spectrum of ds2 | len(ds1) × len(ds2) matrix |
-| `library_search` | every query × every reference spectrum | one row per pair with score ≥ threshold, ordered by query then reference; with intensity coverages |
-| `similarity_by_key` | spectra whose key values are equal (`key1` in ds1 = `key2` in ds2) | one row per matching key, in ds1 order; with intensity coverages |
+| `library_search` | every query × every reference spectrum | one row per pair with score ≥ threshold, ordered by query then reference; with peak intensity coverages |
+| `similarity_by_key` | spectra whose key values are equal (`key1` in ds1 = `key2` in ds2) | one row per matching key, in ds1 order; with peak intensity coverages |
 
 Notes on `similarity_by_key`:
 

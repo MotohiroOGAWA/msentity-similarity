@@ -235,7 +235,7 @@ class SimilarityDataset:
     Columns: key columns (by-key results), ``index1``, ``index2`` (positions in
     the input datasets), one score column per method (``cosine``,
     ``reverse_cosine``, ``modified_cosine``, ``bonanza``; ``score_columns``),
-    ``intensity_coverage1`` / ``intensity_coverage2``, and ``data_index1`` /
+    ``peak_intensity_coverage1`` / ``peak_intensity_coverage2``, and ``data_index1`` /
     ``data_index2`` when the matched spectra are embedded. Files with a single
     ``similarity`` column (older versions) are read with it renamed to the
     method in their metadata.

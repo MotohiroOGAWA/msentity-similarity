@@ -121,7 +121,7 @@ TEST(CApi, LibrarySearchResult) {
   EXPECT_STREQ(name, "cosine");
   mssim_string_free(name);
   ASSERT_EQ(mssim_column_name(result.handle, 3, &name), MSENTITY_OK);
-  EXPECT_STREQ(name, "intensity_coverage1");
+  EXPECT_STREQ(name, "peak_intensity_coverage1");
   mssim_string_free(name);
   EXPECT_EQ(mssim_column_name(result.handle, 7, &name), MSENTITY_ERR_OUT_OF_RANGE);
   EXPECT_EQ(int_column(result.handle, "index2"), (std::vector<int64_t>{0, 1, 4, 2, 3, 2, 3, 1, 4}));

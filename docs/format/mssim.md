@@ -78,7 +78,7 @@ example.mssim
 ### A. The result table (`table.parquet`)
 
 ```text
- index1  index2  cosine              intensity_coverage1  intensity_coverage2  data_index1  data_index2
+ index1  index2  cosine              peak_intensity_coverage1  peak_intensity_coverage2  data_index1  data_index2
       0       0  1.0                 1.0                  1.0                            0            0
       0       1  0.7597143650054932  0.9292697906494141   1.0                            0            1
       1       0  0.7597143650054932  1.0                  0.9292697906494141             1            0
@@ -90,9 +90,9 @@ example.mssim
 | `index1` | int64 | position (0-based) of the spectrum in the **first / query** input dataset |
 | `index2` | int64 | position of the spectrum in the **second / reference** input dataset |
 | `cosine`, `reverse_cosine`, `modified_cosine`, `bonanza` | float32 | one column per calculated method (`parameters.methods`), in this order; the score in [0, 1], or null when the method needs a precursor m/z that a spectrum lacks ([../similarity.md](../similarity.md)) |
-| `intensity_coverage1` | float32 | share of the first / query spectrum's Σ intensity^(2·exponent) carried by its matched peaks, in [0, 1] ([../similarity.md](../similarity.md#8-intensity-coverage)) |
-| `intensity_coverage2` | float32 | the same for the second / reference spectrum |
-| `modified_intensity_coverage1`, `modified_intensity_coverage2` | float32 | with `modified_cosine` or `bonanza`: the same shares under their pairing (direct and precursor-shifted pairs); null without a precursor m/z |
+| `peak_intensity_coverage1` | float32 | share of the first / query spectrum's Σ intensity^(2·exponent) carried by its matched peaks, in [0, 1] ([../similarity.md](../similarity.md#8-peak-intensity-coverage)) |
+| `peak_intensity_coverage2` | float32 | the same for the second / reference spectrum |
+| `modified_peak_intensity_coverage1`, `modified_peak_intensity_coverage2` | float32 | with `modified_cosine` or `bonanza`: the same shares under their pairing (direct and precursor-shifted pairs); null without a precursor m/z |
 | `data_index1` | int64 | row of `matched_data/1/dataset.msds` holding spectrum `index1` (embedded mode only) |
 | `data_index2` | int64 | row of `matched_data/2/dataset.msds` holding spectrum `index2` (embedded mode only) |
 
@@ -106,7 +106,7 @@ Results of a **by-key** calculation start with the key columns. With key
 `SpecID` on both sides there is one key column:
 
 ```text
- SpecID  index1  index2  cosine      intensity_coverage1  intensity_coverage2
+ SpecID  index1  index2  cosine      peak_intensity_coverage1  peak_intensity_coverage2
  SP1          0       1  1.0         1.0                  1.0
  SP2          1       0  1.0         1.0                  1.0
 ```
@@ -201,8 +201,8 @@ the original input files, which must be kept to look the spectra up.
    and in [0, 1].
 7. `index1` / `index2` are 0-based positions in the input datasets as they were
    at calculation time (after any view selection, before saving).
-8. Other columns MAY be present (key columns, `intensity_coverage1` /
-   `intensity_coverage2`, user-added columns); readers MUST keep them. Files
+8. Other columns MAY be present (key columns, `peak_intensity_coverage1` /
+   `peak_intensity_coverage2`, user-added columns); readers MUST keep them. Files
    written by earlier versions of the reference implementation have no
    coverage columns; readers MUST NOT require them.
 

@@ -37,17 +37,17 @@ namespace msentity::similarity {
 // missing (null in result tables, NaN from pair_scores).
 // Scores are clipped to [0, 1]; a zero denominator gives 0.
 //
-// Result tables also report the intensity coverage of each side, from the
+// Result tables also report the peak intensity coverage of each side, from the
 // direct pairing (as for cosine):
-//   intensity_coverage = Σ_matched I^(2·exponent) / Σ_all I^(2·exponent),
+//   peak_intensity_coverage = Σ_matched I^(2·exponent) / Σ_all I^(2·exponent),
 // the share of the spectrum's squared norm carried by its matched peaks (0
 // for a spectrum without positive intensity). By Cauchy–Schwarz,
-//   cosine         <= sqrt(intensity_coverage1 · intensity_coverage2)
-//   reverse_cosine <= sqrt(intensity_coverage2).
+//   cosine         <= sqrt(peak_intensity_coverage1 · peak_intensity_coverage2)
+//   reverse_cosine <= sqrt(peak_intensity_coverage2).
 // With modified_cosine or bonanza, the tables also have
-// modified_intensity_coverage1/2: the same shares under their pairing (direct
+// modified_peak_intensity_coverage1/2: the same shares under their pairing (direct
 // and shifted pairs; null without a precursor m/z), and
-//   modified_cosine <= sqrt(modified_intensity_coverage1 · modified_intensity_coverage2).
+//   modified_cosine <= sqrt(modified_peak_intensity_coverage1 · modified_peak_intensity_coverage2).
 // No such bound holds for bonanza.
 enum class Method { Cosine, ReverseCosine, ModifiedCosine, Bonanza };
 
@@ -114,8 +114,8 @@ std::vector<float> all_pairs_matrix(const MSDataset& ds1, const MSDataset& ds2,
 // score them. Missing keys are skipped; a key value that occurs twice in one
 // dataset is an error. Columns: key1 [, key2 if different], index1, index2,
 // one float32 column per selected method (named by method_name),
-// intensity_coverage1, intensity_coverage2, and with modified_cosine or bonanza
-// modified_intensity_coverage1, modified_intensity_coverage2 (float32); rows
+// peak_intensity_coverage1, peak_intensity_coverage2, and with modified_cosine or bonanza
+// modified_peak_intensity_coverage1, modified_peak_intensity_coverage2 (float32); rows
 // in ds1 order.
 std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDataset& ds2,
                                                 const std::string& key1 = "SpecID",
