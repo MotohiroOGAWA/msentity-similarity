@@ -34,8 +34,10 @@ unweighted = scores["unweighted_entropy"]
 
 Both methods also work with `pair_scores`, `all_pairs`, and `library_search`.
 Use `"0.02Da"` for Da-only matching or `"0.02Da,10ppm"` to enable either
-rule. See [the calculation guide](../../docs/similarity.md#6-spectral-entropy-similarity-entropy-and-unweighted_entropy)
-for preprocessing and weighting details.
+rule. Keep `intensity_exponent=1.0` to use the original relative intensities.
+Close peaks in the same spectrum stay separate. See
+[the calculation guide](../../docs/similarity.md#6-spectral-entropy-similarity-entropy-and-unweighted_entropy)
+for peak pairing, preprocessing, and weighting details.
 
 Development (from this directory, with msentity checked out next to this repository):
 

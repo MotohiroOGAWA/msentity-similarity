@@ -176,17 +176,43 @@ m/z are normalized to sum to 1 after applying `intensity_exponent`.
 For `entropy`, compute Shannon entropy `H = −Σ p ln(p)` for each spectrum.
 When `H < 3`, raise its probabilities to the power `0.25 + 0.25H` and
 normalize again. With `unweighted_entropy`, use the original probabilities.
+Both methods honor `intensity_exponent`. With a value other than 1, the
+initial power transform changes the normalized probabilities and the entropy
+used to decide whether and how to reweight them. Use the default
+`intensity_exponent=1.0` to compute entropy similarity from the original
+relative intensities.
 
 For each matched peak pair with probabilities `p` and `q`, add
 `(f(p + q) − f(p) − f(q)) / 2`, where `f(x) = x log₂(x)` and `f(0) = 0`.
 Unmatched peaks affect normalization and contribute zero to this sum. A pair
 with no matched peaks scores 0. Both methods work without precursor m/z.
 
-The entropy formula and weighting follow [Li et al. (2021)](https://doi.org/10.1038/s41592-021-01331-z).
-Scores can differ from [MSEntropy](https://github.com/YuanyueLi/MSEntropy)
-because its default preprocessing applies noise filtering and peak merging,
-and its ppm tolerance uses the first spectrum's m/z and takes precedence
-over Da when both are set.
+### Close peaks within a spectrum
+
+msentity-similarity keeps peaks within each input spectrum separate. The Da
+and ppm tolerances apply only to pairs across the two spectra. For example,
+a GLACIER prediction can contain peaks at m/z 22.99272156 and 22.99272346,
+about 0.083 ppm apart. If one experimental peak is within tolerance of both
+and there is no other eligible partner, the closer predicted peak pairs
+with it, with ties resolved as in section 1. The other predicted peak
+contributes to that spectrum's normalization and, for `entropy`, its entropy
+and weighting. It contributes zero directly to the similarity sum.
+The similarity API currently has no peak-merging option. To score merged peaks,
+centroid the spectra before passing them to the API.
+
+### Differences from MSEntropy
+
+- **Preprocessing.** MSEntropy's default cleaning filters noise and merges
+  nearby peaks within each spectrum. When both GLACIER peaks in the example
+  are merged, their combined intensity can participate in the match.
+- **Pairing order.** MSEntropy walks the two m/z-sorted peak lists and
+  pairs the first eligible peaks it encounters. msentity-similarity processes
+  candidate pairs in order of increasing absolute m/z difference. Even
+  with cleaning disabled and the same Da tolerance, the methods can pair
+  different peaks when more than one candidate is within tolerance.
+- **Tolerance.** MSEntropy calculates ppm relative to the first spectrum's
+  peak and gives ppm precedence when both units are set. msentity-similarity
+  uses the mean m/z of the two peaks and accepts either rule.
 
 ## 7. Several methods at once
 
