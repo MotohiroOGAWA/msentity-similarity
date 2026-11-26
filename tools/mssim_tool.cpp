@@ -7,7 +7,7 @@
 //
 // search and by-key also take [--method M[,M...]] [--mz-tolerance T]
 // [--exponent E] [--precursor-column C] [--threads N], with M of cosine,
-// reverse_cosine, modified_cosine, bonanza (one score column each) and T such as
+// reverse_cosine, modified_cosine, bonanza, entropy, unweighted_entropy and T such as
 // 0.01Da,10ppm (the default), 10ppm, or 0.01Da. Inputs are any format msentity
 // reads (.msp, .mgf, .msds, .tsv, .csv).
 
@@ -32,7 +32,8 @@ int usage() {
                "  mssim-tool export <input.mssim> <output.csv|.tsv|.parquet>\n"
                "options for search and by-key:\n"
                "  --method M[,M...]  --mz-tolerance T  --exponent E  --precursor-column C  --threads N\n"
-               "  (M: cosine (default), reverse_cosine, modified_cosine, bonanza; the last two need\n"
+               "  (M: cosine (default), reverse_cosine, modified_cosine, bonanza, entropy,\n"
+               "      unweighted_entropy; modified_cosine and bonanza need\n"
                "   a precursor m/z, from C or PrecursorMZ/precursor_mz/PEPMASS/ParentMZ)\n"
                "  (T: 0.01Da,10ppm (default), 10ppm, or 0.01Da; peaks match within either)\n";
   return 2;

@@ -89,8 +89,8 @@ example.mssim
 |---|---|---|
 | `index1` | int64 | position (0-based) of the spectrum in the **first / query** input dataset |
 | `index2` | int64 | position of the spectrum in the **second / reference** input dataset |
-| `cosine`, `reverse_cosine`, `modified_cosine`, `bonanza` | float32 | one column per calculated method (`parameters.methods`), in this order; the score in [0, 1], or null when the method needs a precursor m/z that a spectrum lacks ([../similarity.md](../similarity.md)) |
-| `peak_intensity_coverage1` | float32 | share of the first / query spectrum's Σ intensity^(2·exponent) carried by its matched peaks, in [0, 1] ([../similarity.md](../similarity.md#8-peak-intensity-coverage)) |
+| `cosine`, `reverse_cosine`, `modified_cosine`, `bonanza`, `entropy`, `unweighted_entropy` | float32 | one column per calculated method (`parameters.methods`), in this order; the score in [0, 1], or null when the method needs a precursor m/z that a spectrum lacks ([../similarity.md](../similarity.md)) |
+| `peak_intensity_coverage1` | float32 | share of the first / query spectrum's Σ intensity^(2·exponent) carried by its matched peaks, in [0, 1] ([../similarity.md](../similarity.md#9-peak-intensity-coverage)) |
 | `peak_intensity_coverage2` | float32 | the same for the second / reference spectrum |
 | `modified_peak_intensity_coverage1`, `modified_peak_intensity_coverage2` | float32 | with `modified_cosine` or `bonanza`: the same shares under their pairing (direct and precursor-shifted pairs); null without a precursor m/z |
 | `data_index1` | int64 | row of `matched_data/1/dataset.msds` holding spectrum `index1` (embedded mode only) |
@@ -126,7 +126,7 @@ With different key names (for example `ID` and `Key`) there are two, `ID` and
     "threshold": 0.7,                      // library search: a pair is kept when any
                                            // method scores at least this
     "methods": ["cosine"],                 // the score columns: "cosine", "reverse_cosine",
-                                           // "modified_cosine", "bonanza"
+                                           // "modified_cosine", "bonanza", "entropy", "unweighted_entropy"
     "mz_tolerance_da": 0.01,               // peaks matched within this many Da (0 = off)
     "mz_tolerance_ppm": 10.0,              // ... or within this many ppm (0 = off)
     "intensity_exponent": 1.0,             // intensities were raised to this power
@@ -195,7 +195,7 @@ the original input files, which must be kept to look the spectra up.
    complete Parquet file.
 5. The table MUST have the columns `index1`, `index2` (integers), and at
    least one score column named by a method: `cosine`, `reverse_cosine`,
-   `modified_cosine`, `bonanza` (numbers). Writers SHOULD store the indices as
+   `modified_cosine`, `bonanza`, `entropy`, `unweighted_entropy` (numbers). Writers SHOULD store the indices as
    int64 and scores as float32, and SHOULD write score columns in that order.
 6. Every score MUST be null (not available, e.g. no precursor m/z) or finite
    and in [0, 1].

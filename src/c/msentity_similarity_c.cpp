@@ -104,6 +104,8 @@ int32_t method_flag(Method method) {
     case Method::ReverseCosine: return MSSIM_METHOD_REVERSE_COSINE;
     case Method::ModifiedCosine: return MSSIM_METHOD_MODIFIED_COSINE;
     case Method::Bonanza: return MSSIM_METHOD_BONANZA;
+    case Method::Entropy: return MSSIM_METHOD_ENTROPY;
+    case Method::UnweightedEntropy: return MSSIM_METHOD_UNWEIGHTED_ENTROPY;
   }
   return 0;
 }
@@ -112,9 +114,10 @@ msentity::similarity::Options options_from(const mssim_options* options) {
   msentity::similarity::Options result;
   if (options == nullptr) return result;
   const int32_t all = MSSIM_METHOD_COSINE | MSSIM_METHOD_REVERSE_COSINE |
-                      MSSIM_METHOD_MODIFIED_COSINE | MSSIM_METHOD_BONANZA;
+                      MSSIM_METHOD_MODIFIED_COSINE | MSSIM_METHOD_BONANZA |
+                      MSSIM_METHOD_ENTROPY | MSSIM_METHOD_UNWEIGHTED_ENTROPY;
   require(options->methods != 0 && (options->methods & ~all) == 0,
-          "methods must combine MSSIM_METHOD_COSINE, _REVERSE_COSINE, _MODIFIED_COSINE, _BONANZA");
+          "methods must combine supported MSSIM_METHOD_* flags");
   result.methods.clear();
   for (Method method : msentity::similarity::all_methods()) {
     if (options->methods & method_flag(method)) result.methods.push_back(method);

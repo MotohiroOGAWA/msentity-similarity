@@ -33,12 +33,15 @@ extern "C" {
 #endif
 
 /* Score methods, combined with |; result tables get one column per method,
- * named cosine, reverse_cosine, modified_cosine, bonanza (in this order). The
- * last two need a precursor m/z (otherwise their cells are null). */
+ * named cosine, reverse_cosine, modified_cosine, bonanza, entropy,
+ * unweighted_entropy (in this order). Modified cosine and BONANZA need a
+ * precursor m/z (otherwise their cells are null). */
 #define MSSIM_METHOD_COSINE 0x1
 #define MSSIM_METHOD_REVERSE_COSINE 0x2
 #define MSSIM_METHOD_MODIFIED_COSINE 0x4
 #define MSSIM_METHOD_BONANZA 0x8
+#define MSSIM_METHOD_ENTROPY 0x10
+#define MSSIM_METHOD_UNWEIGHTED_ENTROPY 0x20
 
 typedef struct mssim_options {
   int32_t methods;              /* MSSIM_METHOD_* flags, at least one; default COSINE.

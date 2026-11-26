@@ -1,6 +1,6 @@
 # How scores are calculated
 
-msentity-similarity compares spectra by **cosine similarity of matched peaks**:
+msentity-similarity compares spectra using matched peaks. In the direct pairing,
 peaks of the two spectra are paired when their m/z values agree within a
 tolerance in Da, in ppm, or either. This page defines the calculation precisely
 and works through it on real data, so results can be checked by hand or
@@ -167,16 +167,37 @@ When either spectrum has no precursor m/z, these two scores are **missing**:
 null in result tables, NaN from `pair_scores` / `all_pairs_matrix`; the other
 methods are still calculated for that pair.
 
-## 6. Several methods at once
+## 6. Spectral entropy similarity (`entropy` and `unweighted_entropy`)
 
-`methods` selects one or more of the four; result tables get one score column
+Both methods use the direct one-to-one pairing in section 1, with either or
+both tolerance rules. Each spectrum's finite positive intensities at finite
+m/z are normalized to sum to 1 after applying `intensity_exponent`.
+
+For `entropy`, compute Shannon entropy `H = −Σ p ln(p)` for each spectrum.
+When `H < 3`, raise its probabilities to the power `0.25 + 0.25H` and
+normalize again. With `unweighted_entropy`, use the original probabilities.
+
+For each matched peak pair with probabilities `p` and `q`, add
+`(f(p + q) − f(p) − f(q)) / 2`, where `f(x) = x log₂(x)` and `f(0) = 0`.
+Unmatched peaks affect normalization and contribute zero to this sum. A pair
+with no matched peaks scores 0. Both methods work without precursor m/z.
+
+The entropy formula and weighting follow [Li et al. (2021)](https://doi.org/10.1038/s41592-021-01331-z).
+Scores can differ from [MSEntropy](https://github.com/YuanyueLi/MSEntropy)
+because its default preprocessing applies noise filtering and peak merging,
+and its ppm tolerance uses the first spectrum's m/z and takes precedence
+over Da when both are set.
+
+## 7. Several methods at once
+
+`methods` selects one or more of the six; result tables get one score column
 per method, named as above and always in the order `cosine`,
-`reverse_cosine`, `modified_cosine`, `bonanza`. `library_search` keeps a pair
-when **any** selected method scores at least the threshold (missing scores
+`reverse_cosine`, `modified_cosine`, `bonanza`, `entropy`, `unweighted_entropy`.
+`library_search` keeps a pair when **any** selected method scores at least the threshold (missing scores
 never do). `pair_scores` and `all_pairs_matrix` return one score per pair and
 need exactly one method.
 
-## 7. Edge cases and output
+## 8. Edge cases and output
 
 * An empty spectrum, or one whose intensities are all 0, scores 0 against anything.
 * Scores are clipped to [0, 1] (to absorb rounding) and returned as 32-bit floats.
@@ -186,7 +207,7 @@ need exactly one method.
 * `intensity_exponent = 0.5` (square root) reduces the weight of dominant peaks.
   For the example spectra it raises the cosine from 0.75971 to 0.86077.
 
-## 8. Peak intensity coverage
+## 9. Peak intensity coverage
 
 Result tables (`library_search`, `similarity_by_key`) also report, for each
 side, how much of the spectrum the matched peaks explain:
@@ -240,7 +261,7 @@ peak_intensity_coverage2 = 1
 cosine 0.75971 ≤ sqrt(0.92927 · 1) = 0.96399
 ```
 
-## 9. Calculation modes
+## 10. Calculation modes
 
 | Mode | Pairs compared | Result rows |
 |---|---|---|

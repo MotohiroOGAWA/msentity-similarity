@@ -49,11 +49,15 @@ namespace msentity::similarity {
 // and shifted pairs; null without a precursor m/z), and
 //   modified_cosine <= sqrt(modified_peak_intensity_coverage1 · modified_peak_intensity_coverage2).
 // No such bound holds for bonanza.
-enum class Method { Cosine, ReverseCosine, ModifiedCosine, Bonanza };
+// entropy and unweighted_entropy use the direct pairs and sum-normalized
+// intensities. entropy additionally applies Li et al.'s entropy-dependent
+// weighting to each spectrum before comparison.
+enum class Method { Cosine, ReverseCosine, ModifiedCosine, Bonanza, Entropy, UnweightedEntropy };
 
 // Every method, in the order of result columns.
 const std::vector<Method>& all_methods();
-// "cosine", "reverse_cosine", "modified_cosine", "bonanza" (also the names of
+// "cosine", "reverse_cosine", "modified_cosine", "bonanza", "entropy",
+// "unweighted_entropy" (also the names of
 // the result columns).
 std::string method_name(Method method);
 Method parse_method(const std::string& name);

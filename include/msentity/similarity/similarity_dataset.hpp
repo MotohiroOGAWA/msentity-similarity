@@ -32,7 +32,7 @@ struct Histogram {
 //
 // Invariants (checked by every constructor):
 //   * the table has index1, index2, and at least one score column, named by
-//     a method (cosine, reverse_cosine, modified_cosine, bonanza), numeric,
+//     a method (see all_methods()), numeric,
 //     with values that are missing (null) or finite and within [0, 1];
 //   * metadata_json is a JSON object;
 //   * with matched data: data_index1/data_index2 columns refer to rows of the

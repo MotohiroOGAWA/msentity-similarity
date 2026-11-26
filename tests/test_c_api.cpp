@@ -75,7 +75,7 @@ TEST(CApi, AllPairsAndPairScores) {
   EXPECT_NEAR(scores[0], 0.7586880922317505f, 1e-6);
   EXPECT_NEAR(scores[1], 0.31010058522224426f, 1e-6);
 
-  options.methods = 0x10;  // unknown flag
+  options.methods = 0x40;  // unknown flag
   EXPECT_EQ(mssim_pair_scores(bytes.data(), bytes.size(), index1, bytes.data(), bytes.size(),
                               index2, 2, &options, scores),
             MSENTITY_ERR_INVALID_ARGUMENT);
@@ -85,6 +85,8 @@ TEST(CApi, AllPairsAndPairScores) {
             MSENTITY_ERR_INVALID_ARGUMENT);
   ASSERT_EQ(mssim_parse_methods("bonanza, modified_cosine", &options), MSENTITY_OK);
   EXPECT_EQ(options.methods, MSSIM_METHOD_BONANZA | MSSIM_METHOD_MODIFIED_COSINE);
+  ASSERT_EQ(mssim_parse_methods("entropy,unweighted_entropy", &options), MSENTITY_OK);
+  EXPECT_EQ(options.methods, MSSIM_METHOD_ENTROPY | MSSIM_METHOD_UNWEIGHTED_ENTROPY);
   EXPECT_EQ(mssim_parse_methods("dot", &options), MSENTITY_ERR_INVALID_ARGUMENT);
   index1[0] = 9;
   EXPECT_EQ(mssim_pair_scores(bytes.data(), bytes.size(), index1, bytes.data(), bytes.size(),

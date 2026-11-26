@@ -49,6 +49,50 @@ class TestCalculation(unittest.TestCase):
         np.testing.assert_allclose(mss.all_pairs(self.ds[[0]], self.ds.to_bytes())[0], ROW0,
                                    atol=1e-6)
 
+    def test_spectral_entropy(self) -> None:
+        experimental = ms.from_peaks([[(100, 90), (1000, 10)], []])
+        predicted = ms.from_peaks([[(100.008, 1)], [(1000.008, 1)], [(1500, 1)]])
+        da = mss.parse_mz_tolerance("0.01Da")
+        ppm = mss.parse_mz_tolerance("10ppm")
+        both = mss.parse_mz_tolerance("0.01Da,10ppm")
+
+        for method, low_mz, high_mz in [
+            ("entropy", 0.814177659, 0.533131465),
+            ("unweighted_entropy", 0.948100840, 0.241723343),
+        ]:
+            with self.subTest(method=method):
+                np.testing.assert_allclose(
+                    mss.all_pairs(experimental, predicted, method=method, **da),
+                    [[low_mz, high_mz, 0], [0, 0, 0]], atol=1e-6,
+                )
+                np.testing.assert_allclose(
+                    mss.pair_scores(experimental, [0, 0], predicted, [0, 1], method=method, **ppm),
+                    [0, high_mz], atol=1e-6,
+                )
+                np.testing.assert_allclose(
+                    mss.all_pairs(experimental, experimental, method=method, **both),
+                    [[1, 0], [0, 0]], atol=1e-6,
+                )
+
+        methods = ["entropy", "unweighted_entropy"]
+        dense = ms.from_peaks([[(100, 2)] + [(200 + i, 1) for i in range(24)]])
+        dense_scores = [
+            mss.pair_scores(dense, [0], predicted, [0], method=method, **da)[0]
+            for method in methods
+        ]
+        self.assertGreater(dense_scores[0], 0.0)
+        self.assertEqual(*dense_scores)  # Entropy above 3 leaves the weights unchanged.
+
+        result = mss.library_search(experimental, predicted, threshold=0.8, methods=methods, **both)
+        self.assertEqual(result.score_columns, methods)
+        self.assertEqual(len(result), 1)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "entropy.mssim"
+            result.save(path)
+            with mss.load(path) as loaded:
+                self.assertEqual(loaded.score_columns, methods)
+                np.testing.assert_allclose(loaded["entropy"], [0.814177659], atol=1e-6)
+
     def test_mz_tolerance_text(self) -> None:
         self.assertEqual(mss.parse_mz_tolerance("0.01da,10PPM"),
                          {"mz_tolerance_da": 0.01, "mz_tolerance_ppm": 10.0})
@@ -119,8 +163,11 @@ class TestCalculation(unittest.TestCase):
         # sample.msp has PrecursorMZ, so the precursor methods have values.
         self.ds.set_spec_id("SpecID", "SP")
         result = mss.similarity_by_key(self.ds, self.ds,
-                                       methods=["bonanza", "cosine", "modified_cosine"])
-        self.assertEqual(result.score_columns, ["cosine", "modified_cosine", "bonanza"])
+                                       methods=["bonanza", "entropy", "cosine", "modified_cosine",
+                                                "unweighted_entropy"])
+        self.assertEqual(result.score_columns, [
+            "cosine", "modified_cosine", "bonanza", "entropy", "unweighted_entropy",
+        ])
         for column in result.score_columns:
             self.assertTrue(all(v == 1.0 for v in result[column]))
         self.assertEqual(result.describe_scores("bonanza")["count"], len(result))
