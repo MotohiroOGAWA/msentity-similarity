@@ -187,7 +187,8 @@ void SimilarityDataset::validate() const {
   auto scores = score_column_names(*table_);
   if (scores.empty()) {
     throw std::invalid_argument(
-        "Similarity table needs a score column: cosine, reverse_cosine, modified_cosine, or bonanza");
+        "Similarity table needs a score column: cosine, reverse_cosine, modified_cosine, bonanza, "
+        "entropy, or unweighted_entropy");
   }
   for (const auto& column : scores) {
     auto type = table_->column(column_index(*table_, column))->type()->id();

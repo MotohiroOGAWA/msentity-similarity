@@ -23,7 +23,7 @@ namespace sim = msentity::similarity;
 ```cpp
 sim::Options options;                       // defaults:
 options.methods = {sim::Method::Cosine};    //   one or more of Cosine, ReverseCosine,
-                                            //   ModifiedCosine, Bonanza (one column each)
+                                            //   ModifiedCosine, Bonanza, Entropy, UnweightedEntropy
 options.mz_tolerance_da = 0.01;             //   m/z tolerance in Da, >= 0 (0 = off)
 options.mz_tolerance_ppm = 10.0;            //   m/z tolerance in ppm, >= 0 (0 = off);
                                             //   peaks match within either, see similarity.md
@@ -97,13 +97,14 @@ The result table:
 ```
 
 * `index1` / `index2` — positions in the query / reference dataset.
-* `cosine` (and `reverse_cosine`, `modified_cosine`, `bonanza` when selected) —
+* `cosine` (and `reverse_cosine`, `modified_cosine`, `bonanza`, `entropy`,
+  `unweighted_entropy` when selected) —
   one score column per method (`hits.score_columns()`); null where a precursor
   method lacks a precursor m/z.
 * `peak_intensity_coverage1` / `peak_intensity_coverage2` — share of each spectrum's
   squared (exponentiated) intensity carried by its matched peaks; the cosine
   never exceeds `sqrt(peak_intensity_coverage1 · peak_intensity_coverage2)`
-  ([similarity.md](similarity.md#8-peak-intensity-coverage)).
+  ([similarity.md](similarity.md#9-peak-intensity-coverage)).
 * `data_index1` / `data_index2` — rows of the embedded spectra (only with
   `include_matched_data`).
 
@@ -218,7 +219,7 @@ $ mssim-tool export hits.mssim hits.tsv
 ```
 
 Options for `search` and `by-key`: `--method M[,M...]` (`cosine`,
-`reverse_cosine`, `modified_cosine`, `bonanza`), `--precursor-column C`,
+`reverse_cosine`, `modified_cosine`, `bonanza`, `entropy`, `unweighted_entropy`), `--precursor-column C`,
 `--mz-tolerance T` (`0.01Da,10ppm` by default, or e.g. `10ppm`, `0.01Da`), `--exponent E`,
 `--threads N`; `search` embeds the spectra
 unless `--lightweight` is given, `by-key` only with `--embed`.

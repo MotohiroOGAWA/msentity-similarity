@@ -53,7 +53,14 @@ lib = _load()
 # ---- types -----------------------------------------------------------------------------
 
 # Method flags (MSSIM_METHOD_*), in the order of the result columns.
-METHODS = {"cosine": 0x1, "reverse_cosine": 0x2, "modified_cosine": 0x4, "bonanza": 0x8}
+METHODS = {
+    "cosine": 0x1,
+    "reverse_cosine": 0x2,
+    "modified_cosine": 0x4,
+    "bonanza": 0x8,
+    "entropy": 0x10,
+    "unweighted_entropy": 0x20,
+}
 
 
 class Options(ctypes.Structure):

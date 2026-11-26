@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <limits>
 #include <locale>
+#include <numeric>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -39,6 +40,8 @@ struct PreparedSpectrum {
   double total = 0.0;
   double unlisted_square = 0.0;  // Σ intensity² of positive peaks left out (no finite m/z)
   double precursor = kNaN;
+  std::vector<double> entropy_probabilities;
+  std::vector<double> weighted_entropy_probabilities;
 };
 
 void validate_mz_tolerance(double da, double ppm) {
@@ -66,6 +69,43 @@ bool any_precursor_method(const std::vector<Method>& methods) {
   return std::any_of(methods.begin(), methods.end(), needs_precursor);
 }
 
+void normalize_probabilities(std::vector<double>& probabilities) {
+  double total = std::accumulate(probabilities.begin(), probabilities.end(), 0.0);
+  if (total > 0.0) {
+    for (double& probability : probabilities) probability /= total;
+  }
+}
+
+void prepare_entropy(PreparedSpectrum& spectrum, bool weighted, bool unweighted) {
+  if (spectrum.peaks.empty()) return;
+  double maximum = 0.0;
+  for (const auto& peak : spectrum.peaks) {
+    if (std::isfinite(peak.intensity)) maximum = std::max(maximum, peak.intensity);
+  }
+  if (maximum == 0.0) return;
+
+  std::vector<double> probabilities;
+  probabilities.reserve(spectrum.peaks.size());
+  for (const auto& peak : spectrum.peaks) {
+    probabilities.push_back(std::isfinite(peak.intensity) ? peak.intensity / maximum : 0.0);
+  }
+  normalize_probabilities(probabilities);
+  if (weighted) {
+    auto& weights = spectrum.weighted_entropy_probabilities;
+    weights = probabilities;
+    double entropy = 0.0;
+    for (double probability : weights) {
+      if (probability > 0.0) entropy -= probability * std::log(probability);
+    }
+    if (entropy < 3.0) {
+      double exponent = 0.25 + 0.25 * entropy;
+      for (double& probability : weights) probability = std::pow(probability, exponent);
+      normalize_probabilities(weights);
+    }
+  }
+  if (unweighted) spectrum.entropy_probabilities = std::move(probabilities);
+}
+
 PreparedSpectrum prepare_spectrum(const Spectrum& spectrum, const Options& options) {
   PreparedSpectrum result;
   result.peaks.reserve(static_cast<std::size_t>(spectrum.size()));
@@ -85,6 +125,11 @@ PreparedSpectrum prepare_spectrum(const Spectrum& spectrum, const Options& optio
   }
   std::stable_sort(result.peaks.begin(), result.peaks.end(),
                    [](const Peak& a, const Peak& b) { return a.mz < b.mz; });
+  bool weighted = std::find(options.methods.begin(), options.methods.end(), Method::Entropy) !=
+                  options.methods.end();
+  bool unweighted = std::find(options.methods.begin(), options.methods.end(), Method::UnweightedEntropy) !=
+                    options.methods.end();
+  if (weighted || unweighted) prepare_entropy(result, weighted, unweighted);
   return result;
 }
 
@@ -186,6 +231,8 @@ struct Scored {
   double reverse_cosine = kNaN;
   double modified_cosine = kNaN;
   double bonanza = kNaN;
+  double entropy = kNaN;
+  double unweighted_entropy = kNaN;
   double coverage1 = 0.0;
   double coverage2 = 0.0;
   // Coverages under the pairing of modified cosine and BONANZA (direct and
@@ -199,6 +246,8 @@ struct Scored {
       case Method::ReverseCosine: return reverse_cosine;
       case Method::ModifiedCosine: return modified_cosine;
       case Method::Bonanza: return bonanza;
+      case Method::Entropy: return entropy;
+      case Method::UnweightedEntropy: return unweighted_entropy;
     }
     return kNaN;
   }
@@ -234,19 +283,33 @@ void collect(const PreparedSpectrum& a, const PreparedSpectrum& b, double offset
   }
 }
 
+// The matched-bin contribution to 1 - Jensen-Shannon divergence (base 2).
+// Unmatched bins contribute zero.
+double entropy_contribution(double p, double q) {
+  if (p == 0.0 || q == 0.0) return 0.0;
+  double sum = p + q;
+  return 0.5 * (sum * std::log2(sum) - p * std::log2(p) - q * std::log2(q));
+}
+
 // Sums over one-to-one pairs chosen from candidates.
 struct Pairing {
   double dot = 0.0;
   double matched_norm_a = 0.0, matched_norm_b = 0.0;
   double bonanza_unmatched = 0.0;                        // Σ p² + Σ q² of unmatched peaks
   double bonanza_dot = 0.0;                              // Σ p·q
+  double entropy = 0.0;
+  double unweighted_entropy = 0.0;
 };
 
 // Pairs are taken in order of increasing m/z difference (ties: original peak
 // order of the first, then the second spectrum), skipping pairs whose peaks
 // are already used.
 Pairing pair_peaks(const PreparedSpectrum& a, const PreparedSpectrum& b,
-                   std::vector<Candidate>& candidates, bool bonanza) {
+                   std::vector<Candidate>& candidates, bool bonanza, bool direct = false) {
+  const bool weighted = direct && !a.weighted_entropy_probabilities.empty() &&
+                        !b.weighted_entropy_probabilities.empty();
+  const bool unweighted = direct && !a.entropy_probabilities.empty() &&
+                          !b.entropy_probabilities.empty();
   thread_local std::vector<char> used_a, used_b;
   std::sort(candidates.begin(), candidates.end(), [&](const Candidate& x, const Candidate& y) {
     if (x.difference != y.difference) return x.difference < y.difference;
@@ -264,6 +327,14 @@ Pairing pair_peaks(const PreparedSpectrum& a, const PreparedSpectrum& b,
     result.dot += x * y;
     result.matched_norm_a += x * x;
     result.matched_norm_b += y * y;
+    if (weighted) {
+      result.entropy += entropy_contribution(a.weighted_entropy_probabilities[candidate.first],
+                                             b.weighted_entropy_probabilities[candidate.second]);
+    }
+    if (unweighted) {
+      result.unweighted_entropy += entropy_contribution(a.entropy_probabilities[candidate.first],
+                                                        b.entropy_probabilities[candidate.second]);
+    }
   }
   if (bonanza && a.total > 0 && b.total > 0) {
     for (std::size_t i = 0; i < a.peaks.size(); ++i) {
@@ -289,10 +360,12 @@ Scored score_pair(const PreparedSpectrum& a, const PreparedSpectrum& b, const To
   auto wanted = [&](Method m) { return std::find(methods.begin(), methods.end(), m) != methods.end(); };
   Scored result;
 
-  // Direct pairing: cosine, reverse cosine, and the coverages.
+  // Direct pairing: cosine, reverse cosine, entropy similarities, and the coverages.
   candidates.clear();
   collect(a, b, 0.0, tolerance, candidates);
-  Pairing direct = pair_peaks(a, b, candidates, false);
+  Pairing direct = pair_peaks(a, b, candidates, false, true);
+  if (wanted(Method::Entropy)) result.entropy = clip_unit(direct.entropy);
+  if (wanted(Method::UnweightedEntropy)) result.unweighted_entropy = clip_unit(direct.unweighted_entropy);
   double denominator = std::sqrt(a.norm * b.norm);
   if (wanted(Method::Cosine)) result.cosine = clip_unit(denominator > 0 ? direct.dot / denominator : 0.0);
   if (wanted(Method::ReverseCosine)) {
@@ -449,7 +522,8 @@ std::vector<Method> single_method(const Options& options) {
 
 const std::vector<Method>& all_methods() {
   static const std::vector<Method> methods = {Method::Cosine, Method::ReverseCosine,
-                                              Method::ModifiedCosine, Method::Bonanza};
+                                              Method::ModifiedCosine, Method::Bonanza,
+                                              Method::Entropy, Method::UnweightedEntropy};
   return methods;
 }
 
@@ -459,6 +533,8 @@ std::string method_name(Method method) {
     case Method::ReverseCosine: return "reverse_cosine";
     case Method::ModifiedCosine: return "modified_cosine";
     case Method::Bonanza: return "bonanza";
+    case Method::Entropy: return "entropy";
+    case Method::UnweightedEntropy: return "unweighted_entropy";
   }
   throw std::invalid_argument("unknown method");
 }
@@ -468,7 +544,8 @@ Method parse_method(const std::string& name) {
     if (method_name(method) == name) return method;
   }
   throw std::invalid_argument(
-      "method must be 'cosine', 'reverse_cosine', 'modified_cosine', or 'bonanza', got '" + name + "'");
+      "method must be cosine, reverse_cosine, modified_cosine, bonanza, entropy, or "
+      "unweighted_entropy, got '" + name + "'");
 }
 
 bool needs_precursor(Method method) {
