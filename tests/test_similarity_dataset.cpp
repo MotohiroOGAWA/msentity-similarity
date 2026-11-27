@@ -85,6 +85,33 @@ TEST(SimilarityDataset, Validation) {
                std::invalid_argument);
 }
 
+TEST(SimilarityDataset, MatchedMetadataFiltersAndDelimitedExport) {
+  TempDir tmp;
+  auto query = io::read_tsv_text("Name\tPeak\nfirst\tmz,intensity,note;100,5,fragment\nsecond\t200,1\n");
+  auto reference = io::read_tsv_text("Name\tPeak\nfirst\t100,2\nsecond\t200,3\n");
+  auto table = scores_table({0, 0, 1}, {1, 0, 0}, {0.1, 0.9, 0.2});
+  auto result = SimilarityDataset::with_matched_data(table, "{}", query, reference);
+  EXPECT_EQ(result.column_values("Query.Name"), (std::vector<Value>{"first", "first", "second"}));
+  EXPECT_EQ(result.column_values("Reference.Name"), (std::vector<Value>{"second", "first", "first"}));
+
+  FilterCondition condition;
+  condition.column = "Reference.Name";
+  condition.value = std::string("FIRST");
+  FilterGroup group;
+  group.children.emplace_back(condition);
+  EXPECT_EQ(result.row_positions(group, {"cosine"}, {false}), (std::vector<int64_t>{1, 2}));
+  auto selected = result.filter_by(group);
+  EXPECT_EQ(selected.column_values("index1"), (std::vector<Value>{int64_t{0}, int64_t{1}}));
+
+  DelimitedExportOptions export_options;
+  export_options.columns = std::vector<std::string>{"Reference.Name", "Query.Name"};
+  export_options.peak_sides = {1, 2};
+  auto path = tmp.file("selected.tsv");
+  result.select_rows({1}).export_table(path, export_options);
+  EXPECT_EQ(read_text(path), "Reference.Name\tQuery.Name\tQuery.Peak\tReference.Peak\n"
+                             "first\tfirst\tmz,intensity,note;100,5,fragment\t100,2\n");
+}
+
 TEST(SimilarityDataset, SaveCompactsMatchedData) {
   TempDir tmp;
   MSDataset ds = io::read_msp(msentity_data("sample.msp"));
