@@ -27,6 +27,8 @@ struct MatchedMetadataColumn {
   std::string key;  // qualified, unique column name
 };
 
+enum class SortMode { Native, Text, Numeric };
+
 struct DelimitedExportOptions {
   std::optional<std::vector<std::string>> columns;
   std::vector<int> peak_sides;
@@ -79,6 +81,8 @@ class SimilarityDataset {
   std::vector<MatchedMetadataColumn> matched_metadata_columns() const;
   const std::string& metadata_json() const { return metadata_json_; }
   void set_metadata_json(std::string json);
+  // Update user annotations while preserving calculation metadata.
+  void set_annotations(std::string description, std::vector<std::string> tags, Attributes attributes);
 
   bool has_matched_data() const { return matched_datasets_.has_value(); }
   const std::optional<DatasetPair>& matched_datasets() const { return matched_datasets_; }
@@ -94,7 +98,8 @@ class SimilarityDataset {
   // Result-row positions passing metadata/score conditions, optionally sorted.
   std::vector<int64_t> row_positions(const FilterGroup& filters = {},
                                      const std::vector<std::string>& sort_columns = {},
-                                     const std::vector<bool>& ascending = {}) const;
+                                     const std::vector<bool>& ascending = {},
+                                     const std::vector<SortMode>& modes = {}) const;
   // Stable sort by one or more columns; missing values last.
   SimilarityDataset sort_by(const std::vector<std::string>& columns,
                             const std::vector<bool>& ascending = {}) const;

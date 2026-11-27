@@ -49,6 +49,21 @@ TEST(SimilarityDataset, ReadsReferenceFile) {
   EXPECT_EQ(metadata["parameters"]["methods"], nlohmann::json::array({"cosine"}));
 }
 
+TEST(SimilarityDataset, UserAnnotationsPreserveCalculationMetadata) {
+  TempDir tmp;
+  SimilarityDataset result(scores_table({0}, {0}, {1}), R"({"parameters":{"methods":["cosine"]}})");
+  result.set_annotations("Note", {"tag", "tag"}, {{"Batch", "A"}});
+  auto path = tmp.file("annotated.mssim");
+  result.save(path);
+  auto metadata = nlohmann::json::parse(SimilarityDataset::load(path).metadata_json());
+  EXPECT_EQ(metadata["parameters"]["methods"], nlohmann::json::array({"cosine"}));
+  EXPECT_EQ(metadata["annotations"]["description"], "Note");
+  EXPECT_EQ(metadata["annotations"]["tags"], nlohmann::json::array({"tag"}));
+  EXPECT_EQ(metadata["annotations"]["attributes"]["Batch"], "A");
+  EXPECT_THROW(result.set_annotations("", {}, {{"", "invalid"}}), std::invalid_argument);
+  EXPECT_EQ(nlohmann::json::parse(result.metadata_json())["annotations"]["description"], "Note");
+}
+
 TEST(SimilarityDataset, LegacySimilarityColumnIsRenamed) {
   SimilarityDataset legacy(scores_table({0}, {0}, {0.5}, "similarity"),
                            R"({"parameters": {"method": "reverse_cosine"}})");
@@ -83,6 +98,16 @@ TEST(SimilarityDataset, Validation) {
                std::invalid_argument);
   EXPECT_THROW(SimilarityDataset::with_matched_data(scores_table({3}, {0}, {0.5}), "{}", one, one),
                std::invalid_argument);
+}
+
+TEST(SimilarityDataset, SortModesAndPriority) {
+  auto table = scores_table({0, 1, 2, 3}, {1, 2, 10, 2}, {0.5, 0.8, 1, 0.9});
+  SimilarityDataset result(table);
+  EXPECT_EQ(result.row_positions({}, {"index2"}, {true}, {SortMode::Text}),
+            (std::vector<int64_t>{0, 2, 1, 3}));
+  EXPECT_EQ(result.row_positions({}, {"index2", "cosine"}, {true, false},
+                                 {SortMode::Numeric, SortMode::Numeric}),
+            (std::vector<int64_t>{0, 3, 1, 2}));
 }
 
 TEST(SimilarityDataset, MatchedMetadataFiltersAndDelimitedExport) {

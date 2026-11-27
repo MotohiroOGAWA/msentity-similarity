@@ -350,6 +350,19 @@ void SimilarityDataset::set_metadata_json(std::string json) {
   metadata_json_ = std::move(json);
 }
 
+void SimilarityDataset::set_annotations(std::string description, std::vector<std::string> tags,
+                                        Attributes attributes) {
+  MSDataset annotations;
+  annotations.set_tags(std::move(tags));
+  annotations.set_attributes(std::move(attributes));
+  auto metadata = parse_object(metadata_json_);
+  auto fields = nlohmann::ordered_json::object();
+  for (const auto& [name, value] : annotations.attributes()) fields[name] = value;
+  metadata["annotations"] = {{"description", std::move(description)}, {"tags", annotations.tags()},
+                             {"attributes", std::move(fields)}};
+  metadata_json_ = metadata.dump();
+}
+
 SimilarityDataset::DatasetPair SimilarityDataset::match_records(int64_t row) const {
   if (!matched_datasets_) {
     throw std::invalid_argument("This similarity result does not contain matched data");
@@ -385,9 +398,13 @@ SimilarityDataset SimilarityDataset::filter_by(const FilterGroup& group) const {
 
 std::vector<int64_t> SimilarityDataset::row_positions(const FilterGroup& filters,
                                                        const std::vector<std::string>& columns,
-                                                       const std::vector<bool>& ascending) const {
+                                                       const std::vector<bool>& ascending,
+                                                       const std::vector<SortMode>& modes) const {
   if (!ascending.empty() && ascending.size() != columns.size()) {
     throw std::invalid_argument("ascending must have one entry per column");
+  }
+  if (!modes.empty() && modes.size() != columns.size()) {
+    throw std::invalid_argument("modes must have one entry per column");
   }
   std::vector<int64_t> order;
   if (filters.children.empty() && filters.logic == FilterLogic::And) {
@@ -437,7 +454,25 @@ std::vector<int64_t> SimilarityDataset::row_positions(const FilterGroup& filters
   }
   if (columns.empty()) return order;
   std::vector<std::vector<Value>> keys;
-  for (const auto& column : columns) keys.push_back(column_values(column));
+  for (std::size_t c = 0; c < columns.size(); ++c) {
+    auto values = column_values(columns[c]);
+    auto mode = modes.empty() ? SortMode::Native : modes[c];
+    if (mode == SortMode::Text) {
+      for (auto& value : values) {
+        if (!missing(value)) value = to_display_string(value);
+      }
+    } else if (mode == SortMode::Numeric) {
+      for (auto& value : values) {
+        if (const auto* text = std::get_if<std::string>(&value)) {
+          auto number = internal::parse_number(*text);
+          value = number && std::isfinite(*number) ? Value(*number) : Value(std::monostate{});
+        } else if (const auto* number = std::get_if<double>(&value); number && !std::isfinite(*number)) {
+          value = std::monostate{};
+        }
+      }
+    }
+    keys.push_back(std::move(values));
+  }
   std::stable_sort(order.begin(), order.end(), [&](int64_t a, int64_t b) {
     for (std::size_t c = 0; c < keys.size(); ++c) {
       const Value& va = keys[c][static_cast<std::size_t>(a)];
