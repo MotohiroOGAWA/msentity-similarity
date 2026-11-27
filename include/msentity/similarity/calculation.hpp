@@ -95,6 +95,8 @@ struct Options {
   // ("301.1 1000" in MGF PEPMASS), are read.
   std::string precursor_column;
   int threads = 0;                   // worker threads; 0 = all hardware threads
+  // Library search only: compare pairs with equal, positive precursor m/z.
+  bool match_precursor_mz = false;
 };
 
 // The methods of options without duplicates, in the order of all_methods().
@@ -126,8 +128,9 @@ std::shared_ptr<arrow::Table> similarity_by_key(const MSDataset& ds1, const MSDa
                                                 const std::string& key2 = "SpecID",
                                                 const Options& options = {});
 
-// Score every query spectrum against every reference spectrum and keep the
-// pairs where any selected method scores >= threshold. Columns: index1
+// Score every eligible query/reference pair and keep the pairs where any
+// selected method scores >= threshold. With match_precursor_mz, eligibility
+// requires equal positive precursor m/z values. Columns: index1
 // (query), index2 (reference), one float32 column per selected method,
 // the coverage columns (as similarity_by_key); rows ordered by index1, index2.
 std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDataset& reference,

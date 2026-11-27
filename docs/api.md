@@ -145,6 +145,24 @@ sim::Histogram h = hits.histogram(5);                  // 1–200 bins over [0, 
 // h.counts = {0, 0, 0, 2, 2}, h.edges = {0, 0.2, 0.4, 0.6, 0.8, 1}  (1.0 is in the last bin)
 ```
 
+Use `matched_metadata_columns()` to discover qualified metadata keys from
+embedded Query and Reference spectra. The `column_values()`, `filter_by()`
+and `row_positions()` APIs accept these keys alongside result-table columns.
+
+```cpp
+msentity::FilterCondition condition;
+condition.column = "Reference.Name";
+condition.value = std::string("MassSpecID0000002");
+msentity::FilterGroup filters;
+filters.children.emplace_back(condition);
+auto selected = hits.filter_by(filters).sort_by({"cosine"}, {false});
+
+sim::DelimitedExportOptions options;
+options.columns = std::vector<std::string>{"cosine", "Query.Name", "Reference.Name"};
+options.peak_sides = {1, 2};  // Query.Peak and Reference.Peak
+selected.export_table("selected.tsv", options);
+```
+
 ## 5. Files
 
 ```cpp

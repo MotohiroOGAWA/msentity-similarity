@@ -118,6 +118,7 @@ With different key names (for example `ID` and `Key`) there are two, `ID` and
 
 ```jsonc
 {
+  "annotations": {"description": "Review notes", "tags": ["reviewed"], "attributes": {"Batch": "A"}}, // optional user annotations
   "created_at": "2026-11-06T15:41:04.244104+00:00",  // when the result was calculated (UTC)
   "mode": "library_search",                // "library_search" or "by_key"
   "algorithm": "tolerance_similarity_library_search",

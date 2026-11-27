@@ -85,19 +85,25 @@ SimilarityDataset calculate_library_search(const MSDataset& query, const MSDatas
                                            const std::string& query_source,
                                            const std::string& reference_source,
                                            const ProgressCallback& progress) {
-  auto table = library_search(query, reference, threshold, options, progress);
-  json params = {{"threshold", threshold}};
+  int64_t candidate_pairs = 0;
+  auto count_progress = [&](int64_t done, int64_t total) {
+    candidate_pairs = total;
+    if (progress) progress(done, total);
+  };
+  auto table = library_search(query, reference, threshold, options, count_progress);
+  json params = {{"threshold", threshold}, {"match_precursor_mz", options.match_precursor_mz}};
   params.update(parameters(options));
   json metadata = {
       {"created_at", now_utc()},
       {"mode", "library_search"},
       {"algorithm", "tolerance_similarity_library_search"},
       {"parameters", params},
-      {"matching", "all_pairs_at_or_above_threshold"},
+      {"matching", options.match_precursor_mz ? "equal_precursor_mz_at_or_above_threshold"
+                                             : "all_pairs_at_or_above_threshold"},
       {"sources", json::array({source(query, query_source, "query"),
                                source(reference, reference_source, "reference")})},
       {"row_count", table->num_rows()},
-      {"candidate_pair_count", query.size() * reference.size()},
+      {"candidate_pair_count", candidate_pairs},
       {"index_basis", "zero-based input dataset position"},
       {"input_scope", "entire in-memory datasets (including unsaved edits)"},
       {"matched_data", include_matched_data ? "embedded" : "lightweight"},

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -150,11 +151,44 @@ bool missing(const Value& value) {
   return d != nullptr && std::isnan(*d);
 }
 
-std::string csv_field(const std::string& value, char delimiter) {
-  if (value.find_first_of(std::string{delimiter, '"', '\n', '\r'}) == std::string::npos) {
+std::string csv_field(const std::string& value, char delimiter, bool peak_cell = false) {
+  const bool peak_quotes = peak_cell && !value.empty() &&
+      (value.find(';') != std::string::npos || internal::is_space(value.front()) || internal::is_space(value.back()));
+  if (!peak_quotes && value.find_first_of(std::string{delimiter, '"', '\n', '\r'}) == std::string::npos) {
     return value;
   }
   return "\"" + internal::replace_all(value, "\"", "\"\"") + "\"";
+}
+
+std::string delimited_peaks(const Spectrum& spectrum) {
+  std::vector<std::string> names;
+  std::vector<std::vector<std::string>> annotations;
+  if (auto metadata = spectrum.metadata()) {
+    for (const auto& name : spectrum.metadata_columns()) {
+      if (name == "mz" || name == "intensity") continue;
+      auto column = metadata->GetColumnByName(name);
+      if (!column) continue;
+      std::vector<std::string> values;
+      for (const auto& value : internal::to_values(*column)) values.push_back(to_display_string(value));
+      if (std::none_of(values.begin(), values.end(), [](const auto& value) { return !value.empty(); })) continue;
+      names.push_back(name);
+      annotations.push_back(std::move(values));
+    }
+  }
+  std::string peaks;
+  if (!names.empty()) {
+    peaks = "mz,intensity";
+    for (const auto& name : names) peaks += "," + csv_field(name, ',', true);
+  }
+  for (int64_t peak = 0; peak < spectrum.size(); ++peak) {
+    if (!peaks.empty()) peaks += ';';
+    peaks += internal::format_g17(spectrum.mz(peak)) + "," + internal::format_g17(spectrum.intensity(peak));
+    auto index = static_cast<std::size_t>(peak);
+    std::size_t last = annotations.size();
+    while (last > 0 && annotations[last - 1][index].empty()) --last;
+    for (std::size_t c = 0; c < last; ++c) peaks += "," + csv_field(annotations[c][index], ',', true);
+  }
+  return peaks;
 }
 
 }  // namespace
@@ -277,15 +311,56 @@ std::string score_column(const SimilarityDataset& result, const std::string& col
 
 }  // namespace
 
+std::vector<MatchedMetadataColumn> SimilarityDataset::matched_metadata_columns() const {
+  if (!matched_datasets_) return {};
+  auto used = columns();
+  std::vector<MatchedMetadataColumn> fields;
+  const MSDataset* datasets[] = {&matched_datasets_->first, &matched_datasets_->second};
+  for (int side : {1, 2}) {
+    const std::string prefix = side == 1 ? "Query." : "Reference.";
+    for (const auto& name : datasets[side - 1]->columns()) {
+      std::string key = prefix + name;
+      while (std::find(used.begin(), used.end(), key) != used.end()) key = prefix + key;
+      used.push_back(key);
+      fields.push_back({side, name, std::move(key)});
+    }
+  }
+  return fields;
+}
+
 std::vector<Value> SimilarityDataset::column_values(const std::string& name) const {
   int index = column_index(*table_, name);
-  if (index < 0) throw KeyError("column not found: " + name);
-  return internal::to_values(*table_->column(index));
+  if (index >= 0) return internal::to_values(*table_->column(index));
+  for (const auto& field : matched_metadata_columns()) {
+    if (field.key != name) continue;
+    const auto& dataset = field.side == 1 ? matched_datasets_->first : matched_datasets_->second;
+    const auto values = dataset.column_values(field.column);
+    std::vector<Value> aligned;
+    aligned.reserve(static_cast<std::size_t>(size()));
+    for (int64_t position : int_column(*table_, "data_index" + std::to_string(field.side))) {
+      aligned.push_back(values.at(static_cast<std::size_t>(position)));
+    }
+    return aligned;
+  }
+  throw KeyError("column not found: " + name);
 }
 
 void SimilarityDataset::set_metadata_json(std::string json) {
   parse_object(json);
   metadata_json_ = std::move(json);
+}
+
+void SimilarityDataset::set_annotations(std::string description, std::vector<std::string> tags,
+                                        Attributes attributes) {
+  MSDataset annotations;
+  annotations.set_tags(std::move(tags));
+  annotations.set_attributes(std::move(attributes));
+  auto metadata = parse_object(metadata_json_);
+  auto fields = nlohmann::ordered_json::object();
+  for (const auto& [name, value] : annotations.attributes()) fields[name] = value;
+  metadata["annotations"] = {{"description", std::move(description)}, {"tags", annotations.tags()},
+                             {"attributes", std::move(fields)}};
+  metadata_json_ = metadata.dump();
 }
 
 SimilarityDataset::DatasetPair SimilarityDataset::match_records(int64_t row) const {
@@ -306,6 +381,10 @@ SimilarityDataset SimilarityDataset::filter(const std::vector<bool>& mask) const
   for (std::size_t i = 0; i < mask.size(); ++i) {
     if (mask[i]) rows.push_back(static_cast<int64_t>(i));
   }
+  return select_rows(rows);
+}
+
+SimilarityDataset SimilarityDataset::select_rows(const std::vector<int64_t>& rows) const {
   auto json = parse_object(metadata_json_);
   json["row_count"] = rows.size();
   json["source_row_count"] = size();
@@ -313,16 +392,87 @@ SimilarityDataset SimilarityDataset::filter(const std::vector<bool>& mask) const
                            source_indices_);
 }
 
-SimilarityDataset SimilarityDataset::sort_by(const std::vector<std::string>& columns,
-                                             const std::vector<bool>& ascending) const {
-  if (columns.empty()) throw std::invalid_argument("columns must not be empty");
+SimilarityDataset SimilarityDataset::filter_by(const FilterGroup& group) const {
+  return select_rows(row_positions(group));
+}
+
+std::vector<int64_t> SimilarityDataset::row_positions(const FilterGroup& filters,
+                                                       const std::vector<std::string>& columns,
+                                                       const std::vector<bool>& ascending,
+                                                       const std::vector<SortMode>& modes) const {
   if (!ascending.empty() && ascending.size() != columns.size()) {
     throw std::invalid_argument("ascending must have one entry per column");
   }
+  if (!modes.empty() && modes.size() != columns.size()) {
+    throw std::invalid_argument("modes must have one entry per column");
+  }
+  std::vector<int64_t> order;
+  if (filters.children.empty() && filters.logic == FilterLogic::And) {
+    order.resize(static_cast<std::size_t>(size()));
+    std::iota(order.begin(), order.end(), 0);
+  } else {
+    // FilterEvaluator only needs the columns used by the filter. Give it
+    // one empty spectrum per result row and no embedded peak data.
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::Array>> arrays;
+    std::map<std::pair<std::string, bool>, std::string> projections;
+    auto group = filters;
+    auto prepare = [&](auto&& self, FilterGroup& current) -> void {
+      for (auto& node : current.children) {
+        if (auto* nested = std::get_if<FilterGroup>(&node)) {
+          self(self, *nested);
+          continue;
+        }
+        auto& condition = std::get<FilterCondition>(node);
+        if (condition.op == FilterOperator::SpectrumPeak || condition.op == FilterOperator::NeutralLoss) {
+          throw std::invalid_argument("Spectrum peak filters require a spectrum dataset");
+        }
+        if (condition.op == FilterOperator::Mask || condition.op == FilterOperator::RowIds) continue;
+        const bool text = condition.op == FilterOperator::TextEquals ||
+                          condition.op == FilterOperator::TextNotEquals || condition.op == FilterOperator::Contains;
+        auto [entry, inserted] = projections.try_emplace({condition.column, text}, std::to_string(fields.size()));
+        if (inserted) {
+          auto values = column_values(condition.column);
+          if (text) {
+            for (auto& value : values) value = to_display_string(value);
+          }
+          auto array = internal::values_to_array(values);
+          fields.push_back(arrow::field(entry->second, array->type()));
+          arrays.push_back(std::move(array));
+        }
+        if (text) condition.value = to_display_string(condition.value);
+        condition.column = entry->second;
+      }
+    };
+    prepare(prepare, group);
+    MSDataset projection(arrow::Table::Make(arrow::schema(fields), arrays, size()),
+                         PeakSeries({}, std::vector<int64_t>(static_cast<std::size_t>(size()) + 1, 0)));
+    const auto mask = FilterEvaluator::evaluate(projection, group);
+    for (std::size_t i = 0; i < mask.size(); ++i) {
+      if (mask[i]) order.push_back(static_cast<int64_t>(i));
+    }
+  }
+  if (columns.empty()) return order;
   std::vector<std::vector<Value>> keys;
-  for (const auto& column : columns) keys.push_back(column_values(column));
-  std::vector<int64_t> order(static_cast<std::size_t>(size()));
-  std::iota(order.begin(), order.end(), 0);
+  for (std::size_t c = 0; c < columns.size(); ++c) {
+    auto values = column_values(columns[c]);
+    auto mode = modes.empty() ? SortMode::Native : modes[c];
+    if (mode == SortMode::Text) {
+      for (auto& value : values) {
+        if (!missing(value)) value = to_display_string(value);
+      }
+    } else if (mode == SortMode::Numeric) {
+      for (auto& value : values) {
+        if (const auto* text = std::get_if<std::string>(&value)) {
+          auto number = internal::parse_number(*text);
+          value = number && std::isfinite(*number) ? Value(*number) : Value(std::monostate{});
+        } else if (const auto* number = std::get_if<double>(&value); number && !std::isfinite(*number)) {
+          value = std::monostate{};
+        }
+      }
+    }
+    keys.push_back(std::move(values));
+  }
   std::stable_sort(order.begin(), order.end(), [&](int64_t a, int64_t b) {
     for (std::size_t c = 0; c < keys.size(); ++c) {
       const Value& va = keys[c][static_cast<std::size_t>(a)];
@@ -337,8 +487,14 @@ SimilarityDataset SimilarityDataset::sort_by(const std::vector<std::string>& col
     }
     return false;
   });
-  return SimilarityDataset(internal::take_rows(*table_, order), metadata_json_, matched_datasets_,
-                           source_indices_);
+  return order;
+}
+
+SimilarityDataset SimilarityDataset::sort_by(const std::vector<std::string>& columns,
+                                             const std::vector<bool>& ascending) const {
+  if (columns.empty()) throw std::invalid_argument("columns must not be empty");
+  return SimilarityDataset(internal::take_rows(*table_, row_positions({}, columns, ascending)),
+                           metadata_json_, matched_datasets_, source_indices_);
 }
 
 ScoreSummary SimilarityDataset::describe_scores(const std::string& column) const {
@@ -386,23 +542,50 @@ void SimilarityDataset::export_table(const std::string& path) const {
   if (ext != ".csv" && ext != ".tsv") {
     throw std::invalid_argument("Table export format must be parquet, csv, or tsv");
   }
-  char delimiter = ext == ".csv" ? ',' : '\t';
-  std::ofstream out(path, std::ios::binary);
-  if (!out) throw std::runtime_error("cannot open file for writing: " + path);
-  auto names = columns();
-  for (std::size_t c = 0; c < names.size(); ++c) {
-    out << (c ? std::string(1, delimiter) : "") << csv_field(names[c], delimiter);
-  }
-  out << "\n";
+  export_table(path, DelimitedExportOptions{});
+}
+
+void SimilarityDataset::export_table(const std::string& path, const DelimitedExportOptions& options) const {
+  fs::path target(path);
+  std::string ext = internal::to_lower_ascii(target.extension().string());
+  if (ext != ".csv" && ext != ".tsv") throw std::invalid_argument("Selected columns and peaks require CSV or TSV");
+  const auto names = options.columns.value_or(columns());
+  if (names.empty() && options.peak_sides.empty()) throw std::invalid_argument("Select at least one export column");
   std::vector<std::vector<Value>> values;
   for (const auto& name : names) values.push_back(column_values(name));
-  for (int64_t row = 0; row < size(); ++row) {
-    for (std::size_t c = 0; c < names.size(); ++c) {
-      const Value& v = values[c][static_cast<std::size_t>(row)];
-      out << (c ? std::string(1, delimiter) : "") << csv_field(to_display_string(v), delimiter);
+  auto headers = names;
+  std::vector<std::vector<int64_t>> peak_indices;
+  for (int side : options.peak_sides) {
+    if ((side != 1 && side != 2) || !matched_datasets_) {
+      throw std::invalid_argument("Spectrum peaks require embedded matched data");
     }
-    out << "\n";
+    std::string prefix = side == 1 ? "Query." : "Reference.";
+    std::string name = prefix + "Peak";
+    while (std::find(headers.begin(), headers.end(), name) != headers.end()) name = prefix + name;
+    headers.push_back(std::move(name));
+    peak_indices.push_back(int_column(*table_, "data_index" + std::to_string(side)));
   }
+  if (target.has_parent_path()) fs::create_directories(target.parent_path());
+  std::ofstream out(target, std::ios::binary);
+  if (!out) throw std::runtime_error("cannot open file for writing: " + path);
+  char delimiter = ext == ".csv" ? ',' : '\t';
+  auto write_field = [&](std::size_t column, const std::string& value) {
+    if (column > 0) out << delimiter;
+    out << csv_field(value, delimiter);
+  };
+  for (std::size_t c = 0; c < headers.size(); ++c) write_field(c, headers[c]);
+  out << '\n';
+  for (int64_t row = 0; row < size(); ++row) {
+    auto index = static_cast<std::size_t>(row);
+    for (std::size_t c = 0; c < names.size(); ++c) write_field(c, to_display_string(values[c][index]));
+    for (std::size_t c = 0; c < options.peak_sides.size(); ++c) {
+      const auto& dataset = options.peak_sides[c] == 1 ? matched_datasets_->first : matched_datasets_->second;
+      write_field(names.size() + c, delimited_peaks(dataset.peaks().spectrum(peak_indices[c][index])));
+    }
+    out << '\n';
+  }
+  out.close();
+  if (!out) throw std::runtime_error("failed to write " + path);
 }
 
 // ---- files -----------------------------------------------------------------

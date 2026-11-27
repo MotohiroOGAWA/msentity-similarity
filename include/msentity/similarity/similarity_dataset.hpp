@@ -21,6 +21,19 @@ struct ScoreSummary {
 };
 
 // Score frequencies over [0, 1] (the last bin includes 1.0).
+struct MatchedMetadataColumn {
+  int side;  // 1 = query/first, 2 = reference/second
+  std::string column;
+  std::string key;  // qualified, unique column name
+};
+
+enum class SortMode { Native, Text, Numeric };
+
+struct DelimitedExportOptions {
+  std::optional<std::vector<std::string>> columns;
+  std::vector<int> peak_sides;
+};
+
 struct Histogram {
   std::vector<int64_t> counts;  // bins
   std::vector<double> edges;    // bins + 1
@@ -63,9 +76,13 @@ class SimilarityDataset {
   std::vector<std::string> columns() const;
   // The score columns, in the order of all_methods().
   std::vector<std::string> score_columns() const;
+  // Column values aligned with result rows, including qualified metadata keys.
   std::vector<Value> column_values(const std::string& name) const;
+  std::vector<MatchedMetadataColumn> matched_metadata_columns() const;
   const std::string& metadata_json() const { return metadata_json_; }
   void set_metadata_json(std::string json);
+  // Update user annotations while preserving calculation metadata.
+  void set_annotations(std::string description, std::vector<std::string> tags, Attributes attributes);
 
   bool has_matched_data() const { return matched_datasets_.has_value(); }
   const std::optional<DatasetPair>& matched_datasets() const { return matched_datasets_; }
@@ -76,6 +93,13 @@ class SimilarityDataset {
   // ---- operations ------------------------------------------------------------------
   // Rows where mask is true; metadata gets row_count and source_row_count.
   SimilarityDataset filter(const std::vector<bool>& mask) const;
+  SimilarityDataset filter_by(const FilterGroup& group) const;
+  SimilarityDataset select_rows(const std::vector<int64_t>& positions) const;
+  // Result-row positions passing metadata/score conditions, optionally sorted.
+  std::vector<int64_t> row_positions(const FilterGroup& filters = {},
+                                     const std::vector<std::string>& sort_columns = {},
+                                     const std::vector<bool>& ascending = {},
+                                     const std::vector<SortMode>& modes = {}) const;
   // Stable sort by one or more columns; missing values last.
   SimilarityDataset sort_by(const std::vector<std::string>& columns,
                             const std::vector<bool>& ascending = {}) const;
@@ -85,6 +109,8 @@ class SimilarityDataset {
   Histogram histogram(int bins = 20, const std::string& column = "") const;
   // Write the table as .parquet, .csv, or .tsv (by extension).
   void export_table(const std::string& path) const;
+  // TSV/CSV with selected columns and optional embedded spectrum peak cells.
+  void export_table(const std::string& path, const DelimitedExportOptions& options) const;
 
   // ---- files ----------------------------------------------------------------------
   static SimilarityDataset load(const std::string& path);

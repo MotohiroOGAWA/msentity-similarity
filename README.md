@@ -1,4 +1,4 @@
-# msentity-similarity
+<h1><img src="media/similarity-icon.png" alt="" width="40" height="40" align="center"> msentity-similarity</h1>
 
 Spectrum similarity for [msentity](https://github.com/MotohiroOGAWA/msentity)
 datasets, and the `.mssim` file format for the results. Like msentity, it is a
