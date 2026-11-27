@@ -395,10 +395,11 @@ Scored score_pair(const PreparedSpectrum& a, const PreparedSpectrum& b, const To
 }
 
 std::vector<PreparedSpectrum> prepare_all(const MSDataset& dataset, const Options& options,
-                                          const std::vector<Method>& methods) {
+                                          const std::vector<Method>& methods,
+                                          bool match_precursor_mz = false) {
   std::vector<PreparedSpectrum> prepared(static_cast<std::size_t>(dataset.size()));
   std::vector<double> precursor;
-  if (any_precursor_method(methods)) precursor = precursors(dataset, options);
+  if (match_precursor_mz || any_precursor_method(methods)) precursor = precursors(dataset, options);
   for (int64_t i = 0; i < dataset.size(); ++i) {
     auto& spectrum = prepared[static_cast<std::size_t>(i)];
     spectrum = prepare_spectrum(dataset.peaks().spectrum(i), options);
@@ -830,9 +831,34 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
     throw std::invalid_argument("threshold must be a finite value between 0 and 1");
   }
   const int64_t n_query = query.size(), n_reference = reference.size();
-  const int64_t total = n_query * n_reference;
-  auto prepared_query = prepare_all(query, options, methods);
-  auto prepared_reference = prepare_all(reference, options, methods);
+  auto prepared_query = prepare_all(query, options, methods, options.match_precursor_mz);
+  auto prepared_reference = prepare_all(reference, options, methods, options.match_precursor_mz);
+
+  std::vector<int64_t> all_references, no_references;
+  std::unordered_map<double, std::vector<int64_t>> references_by_precursor;
+  if (options.match_precursor_mz) {
+    for (int64_t r = 0; r < n_reference; ++r) {
+      double mz = prepared_reference[static_cast<std::size_t>(r)].precursor;
+      if (std::isfinite(mz)) references_by_precursor[mz].push_back(r);
+    }
+  } else {
+    all_references.resize(static_cast<std::size_t>(n_reference));
+    std::iota(all_references.begin(), all_references.end(), int64_t{0});
+  }
+  std::vector<const std::vector<int64_t>*> candidates(static_cast<std::size_t>(n_query), &all_references);
+  std::vector<int64_t> pair_counts(static_cast<std::size_t>(n_query) + 1, 0);
+  int64_t largest_group = 0;
+  for (std::size_t q = 0; q < candidates.size(); ++q) {
+    if (options.match_precursor_mz) {
+      double mz = prepared_query[q].precursor;
+      auto found = std::isfinite(mz) ? references_by_precursor.find(mz) : references_by_precursor.end();
+      candidates[q] = found == references_by_precursor.end() ? &no_references : &found->second;
+    }
+    auto count = static_cast<int64_t>(candidates[q]->size());
+    pair_counts[q + 1] = pair_counts[q] + count;
+    largest_group = std::max(largest_group, count);
+  }
+  const int64_t total = pair_counts.back();
   const Tolerance tolerance(options);
   // Scores are stored as float32: compare them as stored.
   auto kept = [&](const Scored& s) {
@@ -846,21 +872,21 @@ std::shared_ptr<arrow::Table> library_search(const MSDataset& query, const MSDat
   // Hits of each query row, filled in parallel, joined in order.
   std::vector<std::vector<std::pair<int64_t, Scored>>> hits(static_cast<std::size_t>(n_query));
   const unsigned threads = thread_count(options, total);
-  const int64_t batch = std::max<int64_t>(1, 4096 / std::max<int64_t>(1, n_reference) + 1) * threads;
+  const int64_t batch = std::max<int64_t>(1, 4096 / std::max<int64_t>(1, largest_group) + 1) * threads;
   if (progress) progress(0, total);
-  for (int64_t start = 0; start < n_query; start += batch) {
+  for (int64_t start = 0; total > 0 && start < n_query; start += batch) {
     int64_t stop = std::min(n_query, start + batch);
     parallel_ranges(stop - start, threads, [&](int64_t begin, int64_t end) {
       for (int64_t q = start + begin; q < start + end; ++q) {
         auto& row = hits[static_cast<std::size_t>(q)];
-        for (int64_t r = 0; r < n_reference; ++r) {
+        for (int64_t r : *candidates[static_cast<std::size_t>(q)]) {
           Scored s = score_pair(prepared_query[static_cast<std::size_t>(q)],
                                 prepared_reference[static_cast<std::size_t>(r)], tolerance, methods);
           if (kept(s)) row.emplace_back(r, s);
         }
       }
     });
-    if (progress) progress(stop * n_reference, total);
+    if (progress) progress(pair_counts[static_cast<std::size_t>(stop)], total);
   }
 
   std::vector<int64_t> index1, index2;
