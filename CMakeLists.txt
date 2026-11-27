@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(msentity_similarity
-  VERSION 2.0.1
+  VERSION 2.1.0
   DESCRIPTION "Spectrum similarity and the .mssim result format, built on msentity"
   LANGUAGES CXX)
 
@@ -38,7 +38,7 @@ include(GNUInstallDirs)
 include(FetchContent)
 FetchContent_Declare(msentity
   GIT_REPOSITORY https://github.com/MotohiroOGAWA/msentity.git
-  GIT_TAG v1.2.2)
+  GIT_TAG v1.2.3)
 set(MSENTITY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(MSENTITY_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(MSENTITY_TEST_BINDINGS OFF CACHE BOOL "" FORCE)
