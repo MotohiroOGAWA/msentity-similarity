@@ -43,16 +43,19 @@ both repositories together.
 
 ## Python (≥ 3.10)
 
-The wheels are attached to the GitHub Releases. Give pip the release page of
-msentity-similarity and that of the msentity release it depends on:
+Install from [PyPI](https://pypi.org/project/msentity-similarity/); pip picks
+the wheel for the current platform and also installs the msentity release it
+depends on:
 
 ```console
-pip install msentity-similarity==2.1.0 \
-  --find-links https://github.com/MotohiroOGAWA/msentity-similarity/releases/expanded_assets/v2.1.0 \
-  --find-links https://github.com/MotohiroOGAWA/msentity/releases/expanded_assets/v1.2.3
+pip install msentity-similarity
+pip install -U msentity-similarity   # upgrade to the latest release
 ```
 
-(Earlier instructions used a GitHub Pages index; it is no longer updated.) <!-- fixed -->
+To install a particular release, give its version, e.g. `pip install msentity-similarity==2.1.0`.
+Install msentity through msentity-similarity: each msentity-similarity release requires one msentity release, and pip switches msentity to it.
+
+PyPI has msentity-similarity 2.1.0 and later. Earlier releases are installed from the GitHub Release pages of msentity-similarity and of the msentity release they depend on, both given as `--find-links`. <!-- fixed -->
 
 ```python
 import msentity as ms

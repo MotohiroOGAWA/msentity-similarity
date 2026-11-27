@@ -33,7 +33,7 @@ for these examples, msentity 1.2.3.
 |---|---|
 | C | Download `msentity-similarity-c-<version>-<platform>.zip` from the release (it includes the msentity C library) |
 | C++ | CMake `FetchContent` with the release tag; the compatible msentity source is fetched automatically |
-| Python | `pip` with the release pages of msentity-similarity and msentity as `--find-links` (below) |
+| Python | `pip install msentity-similarity` from [PyPI](https://pypi.org/project/msentity-similarity/) (below) |
 | Java | Download the msentity and msentity-similarity JARs from their releases |
 | C# | Download both NuGet packages from their releases and use the folder as a package source |
 
@@ -56,16 +56,15 @@ target_link_libraries(app PRIVATE msentity::similarity)
 
 ### Python (≥ 3.10)
 
-Give pip both release pages: the msentity-similarity wheel and the msentity
-wheel it depends on:
+Install from [PyPI](https://pypi.org/project/msentity-similarity/). pip also
+installs the msentity release it depends on:
 
 ```console
-pip install msentity-similarity==2.1.0 \
-  --find-links https://github.com/MotohiroOGAWA/msentity-similarity/releases/expanded_assets/v2.1.0 \
-  --find-links https://github.com/MotohiroOGAWA/msentity/releases/expanded_assets/v1.2.3
+pip install msentity-similarity
+pip install -U msentity-similarity   # upgrade to the latest release
 ```
 
-The second URL is the msentity release that this similarity release depends on.
+To install a particular release, give its version, e.g. `pip install msentity-similarity==2.1.0`.
 
 ### Java (≥ 22)
 
